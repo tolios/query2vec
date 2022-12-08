@@ -6,7 +6,8 @@ import argparse
 import json
 from tqdm import tqdm
 import torch
-from torch_geometric.data import  Data, Dataset
+from torch_geometric.data import  Data, Dataset, Batch
+import torch.nn as nn
 
 def query2graph(query: list)->Data:
     #*  Receives a query in form of list of triples and 
@@ -325,6 +326,22 @@ class connections():
 def corrupted_answer(num_entities, batch_size, start = 1):
     return torch.randint(high=num_entities, size=batch_size)+start
 
+class graph_embedding(nn.Module):
+    def __init__(self, num_entities, num_relationships, emb_dim):
+        super().__init__()
+        self.entity_emb = nn.Embedding(num_entities+1, emb_dim, padding_idx=0) #entities have a padding of zeros!
+        self.relationship_emb = nn.Embedding(num_relationships, emb_dim)
+    def forward(self, g_batch):
+        #*  Receives a batch of graphs, containing entity/relationship ids,
+        #* returns embedded batch of graphs ...
+        x = self.entity_emb(g_batch.x).squeeze(-2)
+        edges = self.relationship_emb(g_batch.edge_attr).squeeze(-2)
+        #construct data object...
+        return Batch(x=x, edge_index=g_batch.edge_index,
+                edge_attr=edges, batch=g_batch.batch, ptr=g_batch.ptr)
+    def embed_entities(self, batch):
+        return self.entity_emb(batch)
+
 if __name__ == "__main__":
 
 
@@ -394,12 +411,16 @@ if __name__ == "__main__":
     train.write_qas(qa_dir+'/val_qa.txt', other = val, query_orders=val_query_orders) #combines with val and keeps one edge (atleast) 
     train.write_qas(qa_dir+'/test_qa.txt', other = test, query_orders=test_query_orders) #combines with test and keeps one edge (atleast)
 
-    #Making an info file...
-    with open(qa_dir+'/info.txt', 'w') as f:
-        f.write('Queries info:\n')
-        f.write('train_path: '+args.train_path+'\n')
-        f.write('val_path: '+args.val_path+'\n')
-        f.write('test_path: '+args.test_path+'\n')
-        f.write('train_query_orders: '+args.train_query_orders+'\n')
-        f.write('val_query_orders: '+args.val_query_orders+'\n')
-        f.write('test_query_orders: '+args.test_query_orders+'\n')
+    #Making an info json file...
+    info = {
+        'train_path': args.train_path,
+        'val_path': args.val_path,
+        'num_entities': len(train.entity2id),
+        'num_relationships': len(train.relationship2id), 
+        'train_query_orders': args.train_query_orders,
+        'val_query_orders': args.val_query_orders,
+        'test_query_orders': args.test_query_orders
+    }
+
+    with open(qa_dir+'/info.json', 'w') as f:
+        json.dump(info, f)
