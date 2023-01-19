@@ -3,12 +3,14 @@ import os
 import torch
 from torch_geometric.seed import seed_everything
 from train import training
+from utils import save, load
 from graph import qa_dataset
 import argparse
 import importlib
 import inspect
 from torch.utils.tensorboard.writer import SummaryWriter
 import warnings
+import glob
 
 #! UNDER DEVELOPMENT CHECK ALL
 
@@ -25,6 +27,8 @@ parser = argparse.ArgumentParser(description='Training knowledge graph embedding
 parser.add_argument("save_path",
                     type=str, help="Directory where model is saved")
 #optional arguments...
+parser.add_argument("--pretrained",action=argparse.BooleanOptionalAction,
+                    help="If True, it means we will train again!")
 parser.add_argument("--algorithm",
                     default='experiment',
                     type=str, help="Embedding algorithm (stored in algorithms folder!)")
@@ -47,7 +51,7 @@ parser.add_argument("--val_batch_size",
                     default=1024,
                     type=int, help="Validation data batch size")
 parser.add_argument("--lr",
-                    default=0.001,
+                    default=0.1,
                     type=float, help="Learning rate")
 parser.add_argument("--weight_decay",
                     default=0.0,
@@ -90,27 +94,37 @@ WEIGHT_DECAY = args.weight_decay
 PATIENCE = args.patience
 SAVE_PATH = args.save_path
 algorithm = args.algorithm
+pretrained = args.pretrained
 
 cwd = os.getcwd()
 
 #directory where qas are stored...
 id_dir=os.path.dirname(TRAIN_PATH)
 
-#create save_path containing everything!
-os.makedirs(SAVE_PATH)
-
-#now update model dictionary with possible given values!
-for arg in model_args:
-    model_args[arg] = vars(args)[arg]
-
 #data
 #training
 train_qa = qa_dataset(TRAIN_PATH)
 val_qa = qa_dataset(VAL_PATH)
 
-#define trainable embeddings!
-#! ACCESS info.json
-model = module.Model(14505, 237, **model_args)
+if pretrained:
+    #load model!
+    model, model_dict = load(SAVE_PATH+'/model.pth.tar', module.Model)
+else:
+    #define new model!
+
+    #create save_path containing everything, unless pretrained (already exists!!)!
+    os.makedirs(SAVE_PATH)
+
+    #now update model dictionary with possible given values!
+    for arg in model_args:
+        model_args[arg] = vars(args)[arg]
+    #define trainable embeddings!
+    #! ACCESS info.json to get these!!!
+
+    num_entities = 14505
+    num_relationships = 237
+
+    model = module.Model(num_entities, num_relationships, **model_args)
 
 #! fix, train (q, a) where q contains many!
 #writer.add_graph(model, (train[:10], train[10:20]))
@@ -118,8 +132,14 @@ model = module.Model(14505, 237, **model_args)
 #change to the model directory...
 os.chdir(SAVE_PATH)
 
+#set #of runs!
+if not pretrained:
+    n = 1
+else:
+    n = len(glob.glob('./run_*'))+1
+
 #init SummaryWriter
-writer = SummaryWriter(log_dir='./run')
+writer = SummaryWriter(log_dir=f'./run_{n}')
 
 start = time.time()
 #training begins...
@@ -135,14 +155,17 @@ os.chdir(cwd)
 
 #save model!
 #create folder containing embeddings
-model.save(SAVE_PATH+'/model.pth.tar')
-#save train configuration!
-with open(SAVE_PATH+'/train_config.txt', 'w') as file:
+if not pretrained:
+    save(model, [num_entities, num_relationships], model_args, SAVE_PATH+'/model.pth.tar')
+else: #! maybe add a replace or not utility! (not lose the old one...)
+    save(model, model_dict['args'], model_dict['kwargs'], SAVE_PATH+'/model.pth.tar')
+# save train configuration!
+with open(SAVE_PATH+f'/train_config_{n}.txt', 'w') as file:
     file.write(f'ALGORITHM: {algorithm}\n')
     file.write(f'SEED: {args.seed}\n')
     file.write(f'TRAIN_PATH: {TRAIN_PATH}\n')
     file.write(f'VAL_PATH: {VAL_PATH}\n')
-    #! ACCESS info.json
+    #! ACCESS info.json (contained in FB15k_237/qa/ )
     # file.write(f'NUM_EMBEDDINGS_OBJECT: {train.n_objects}\n')
     # file.write(f'NUM_EMBEDDINGS_RELATIONSHIP: {train.n_relationships}\n')
     file.write(f'EPOCHS: {EPOCHS}\n')
@@ -152,7 +175,8 @@ with open(SAVE_PATH+'/train_config.txt', 'w') as file:
     file.write(f'VAL_BATCH_SIZE: {VAL_BATCH_SIZE}\n')
     file.write(f'LEARNING_RATE: {LEARNING_RATE}\n')
     file.write(f'WEIGHT_DECAY: {WEIGHT_DECAY}\n')
-    file.write('Model args:\n')
-    for arg in model_args:
-        file.write(f'{arg}: {model_args[arg]}\n')
+    if not pretrained: #maybe define a txt with the architecture ?!
+        file.write('Model args:\n')
+        for arg in model_args:
+            file.write(f'{arg}: {model_args[arg]}\n')
     file.write(f'Training time: {"{:.4f}".format((end-start)/60)} min(s)')

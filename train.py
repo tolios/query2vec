@@ -6,6 +6,7 @@ from torch_geometric.data import Dataset
 from torch.optim import SGD
 from graph import *
 from torch.utils.tensorboard import SummaryWriter
+from utils import save, load
 
 def training(model: torch.nn.Module,
     train: Dataset, val: Dataset, writer: SummaryWriter,
@@ -94,7 +95,7 @@ def training(model: torch.nn.Module,
                     print('Early stopping at epoch:', epoch)
                     print('Loading from epoch:', epoch_stop)
                     #load model from previous checkpoint!
-                    model.load('./checkpoint.pth.tar')
+                    model, _ = load('./checkpoint.pth.tar', model.__class__)
                     break
                 else:
                     #be patient...
@@ -104,7 +105,7 @@ def training(model: torch.nn.Module,
                         print('Finished during early stopping...')
                         print('Loading from epoch:', epoch_stop)
                         #load model from previous checkpoint!
-                        model.load('./checkpoint.pth.tar')
+                        model, _ = load('./checkpoint.pth.tar', model.__class__)
         else:
             epoch_stop = epochs
     ## If checkpoint exists, delete it ##
