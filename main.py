@@ -11,7 +11,10 @@ import inspect
 from torch.utils.tensorboard.writer import SummaryWriter
 import warnings
 import glob
+import json
 
+#TODO USE COLAB GPU !!! QA FOLDER IS LIGHT!!!
+#TODO Implement nDCG metric
 #! UNDER DEVELOPMENT CHECK ALL
 
 warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)
@@ -59,26 +62,32 @@ parser.add_argument("--weight_decay",
 parser.add_argument("--patience",
                     default=-1,
                     type=int, help="Patience for early stopping")
-
-#parse known and unknown args!!!
-args, unknown = parser.parse_known_args()
-
-#custom parsed arguments from Model kwargs!!!
-#given module... algorithm argument
-module = importlib.import_module('algorithms.'+args.algorithm, ".")
-#module.Model keyword args!
-spec_args = inspect.getfullargspec(module.Model)
-values = spec_args.defaults
-custom_args = spec_args.args[-len(values):]
-#make arg dictionary
-model_args = {x:y for x, y in zip(custom_args, values)}
-for arg in model_args:
-    #adding Model keyword arguments to the parser!!!
-    parser.add_argument("--"+arg,default=model_args[arg],
-                            type = type(model_args[arg]))
+parser.add_argument("--json_model",
+                    default="",
+                    type=str, help="Model architecture json file...")
 
 #finds all arguments...
 args = parser.parse_args()
+
+#load model.json
+if args.json_model:
+    with open(args.json_model, 'r') as f:
+        updated_args = json.load(f)
+        algorithm = updated_args['model_type']
+        updated_args = updated_args['model_params']
+else:
+    #no updates! Preset architecture...
+    algorithm = 'experiment'
+    updated_args = {}
+#custom parsed arguments from Model kwargs!!!
+#given module... algorithm argument
+module = importlib.import_module('algorithms.'+algorithm, ".")
+#module.Model keyword args!
+spec_args = inspect.getfullargspec(module.Model)
+values = spec_args.defaults
+model_args = spec_args.args[-len(values):]
+#make arg dictionary
+model_args = {x:updated_args[x] if x in updated_args else y for x, y in zip(model_args, values)}
 
 #seeds
 seed_everything(args.seed)
@@ -115,9 +124,6 @@ else:
     #create save_path containing everything, unless pretrained (already exists!!)!
     os.makedirs(SAVE_PATH)
 
-    #now update model dictionary with possible given values!
-    for arg in model_args:
-        model_args[arg] = vars(args)[arg]
     #define trainable embeddings!
     #! ACCESS info.json to get these!!!
 
@@ -161,7 +167,6 @@ else: #! maybe add a replace or not utility! (not lose the old one...)
     save(model, model_dict['args'], model_dict['kwargs'], SAVE_PATH+'/model.pth.tar')
 # save train configuration!
 with open(SAVE_PATH+f'/train_config_{n}.txt', 'w') as file:
-    file.write(f'ALGORITHM: {algorithm}\n')
     file.write(f'SEED: {args.seed}\n')
     file.write(f'TRAIN_PATH: {TRAIN_PATH}\n')
     file.write(f'VAL_PATH: {VAL_PATH}\n')
@@ -175,8 +180,13 @@ with open(SAVE_PATH+f'/train_config_{n}.txt', 'w') as file:
     file.write(f'VAL_BATCH_SIZE: {VAL_BATCH_SIZE}\n')
     file.write(f'LEARNING_RATE: {LEARNING_RATE}\n')
     file.write(f'WEIGHT_DECAY: {WEIGHT_DECAY}\n')
-    if not pretrained: #maybe define a txt with the architecture ?!
-        file.write('Model args:\n')
-        for arg in model_args:
-            file.write(f'{arg}: {model_args[arg]}\n')
     file.write(f'Training time: {"{:.4f}".format((end-start)/60)} min(s)')
+
+#model architecture...
+if not pretrained:
+    with open(SAVE_PATH+'/model_arch.json', 'w') as f:
+        model_args = {
+            'model_type': algorithm,
+            'model_params': model_args
+        }
+        json.dump(model_args, f, sort_keys=True, indent=2)

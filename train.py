@@ -85,7 +85,8 @@ def training(model: torch.nn.Module,
                 #setting new score!
                 highest_val_score = running_val_score/j
                 #save model checkpoint...
-                model.save('./checkpoint.pth.tar')
+                save(model, [model.num_entities, model.num_relationships], 
+                    model.kwargs, 'checkpoint.pt')
                 epoch_stop = epoch
                 #"zero out" counter
                 stop_counter = 1
@@ -95,7 +96,7 @@ def training(model: torch.nn.Module,
                     print('Early stopping at epoch:', epoch)
                     print('Loading from epoch:', epoch_stop)
                     #load model from previous checkpoint!
-                    model, _ = load('./checkpoint.pth.tar', model.__class__)
+                    model, _ = load('checkpoint.pt', model.__class__)
                     break
                 else:
                     #be patient...
@@ -105,12 +106,12 @@ def training(model: torch.nn.Module,
                         print('Finished during early stopping...')
                         print('Loading from epoch:', epoch_stop)
                         #load model from previous checkpoint!
-                        model, _ = load('./checkpoint.pth.tar', model.__class__)
+                        model, _ = load('checkpoint.pt', model.__class__)
         else:
             epoch_stop = epochs
     ## If checkpoint exists, delete it ##
-    if os.path.isfile('./checkpoint.pth.tar'):
-        os.remove('./checkpoint.pth.tar')
+    if os.path.isfile('checkpoint.pt'):
+        os.remove('checkpoint.pt')
 
     print('Training ends ...')
     #returning model as well as writer and actual last epoch (early stopping)...
