@@ -11,7 +11,7 @@ from utils import save, load
 def training(model: torch.nn.Module,
     train: Dataset, val: Dataset, writer: SummaryWriter,
     epochs = 50, batch_size = 1024, val_batch_size = 1024,
-    lr = 0.1, weight_decay = 0.0005, patience = -1):
+    lr = 0.1, weight_decay = 0.0005, patience = -1, device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
     Returns trained model, training losses, Uncorrupted and Corrupted energies.
@@ -22,6 +22,8 @@ def training(model: torch.nn.Module,
     optimizer = SGD(model.parameters(), lr = lr, weight_decay = weight_decay)
     #training begins...
     t_start = time.time()
+    #put in device...
+    model.to(device)
     #for early stopping!
     #start with huge number!
     highest_val_score = -1e5
@@ -41,8 +43,10 @@ def training(model: torch.nn.Module,
         # model.normalize()
         for i, qa_batch in enumerate(train_loader):
             batch, answers = qa_batch
+            batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
             corrupted = corrupted_answer(model.num_entities, answers.size(), start = 1)
+            corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
             #zero out gradients...
@@ -61,6 +65,7 @@ def training(model: torch.nn.Module,
             for j, qa_batch in enumerate(val_loader):
                 #questions and answers!
                 batch, answers = qa_batch
+                batch, answers = batch.to(device), answers.to(device)
                 #calculate validation scores!!!
                 running_val_score += model.predict(batch, answers).mean().data.item()
         #print results...

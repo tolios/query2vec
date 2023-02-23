@@ -12,6 +12,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 import warnings
 import glob
 import json
+from config import DEVICE
 
 #TODO USE COLAB GPU !!! QA FOLDER IS LIGHT!!!
 #TODO Implement nDCG metric
@@ -149,7 +150,7 @@ writer = SummaryWriter(log_dir=f'./run_{n}')
 
 start = time.time()
 #training begins...
-model, writer, actual_epochs = training(model, train_qa, val_qa, writer,
+model, writer, actual_epochs = training(model, train_qa, val_qa, writer, device=DEVICE,
                 epochs = EPOCHS, batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
                 lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
 

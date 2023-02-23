@@ -3,14 +3,16 @@ from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64):
+def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
     with torch.no_grad():
         mean = 0.
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
+        comp = comp.to(device)
         for q, a in tqdm(loader, desc='Raw mean rank calculation'):
+            q, a = q.to(device), a.to(device)
             if a.shape[0] != batch_size:
                 #last batch...
                 comp = comp[:a.shape[0]]
@@ -23,17 +25,19 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64):
             mean += torch.sum(torch.eq(_indices,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
-def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64):
+def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, device=torch.device('cpu')):
     with torch.no_grad():
         hits = 0
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
         #useful tensors...
-        zero_tensor = torch.tensor([0])
-        one_tensor = torch.tensor([1])
+        zero_tensor, one_tensor = torch.tensor([0]), torch.tensor([1])
+        zero_tensor, one_tensor = zero_tensor.to(device), one_tensor.to(device)
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
+        comp = comp.to(device)
         for q, a in tqdm(loader, desc=f'Raw hits@{N} calculation'):
+            q, a = q.to(device), a.to(device)
             #calculating head and tail energies for prediction
             if a.shape[0] != batch_size:
                 #last batch...

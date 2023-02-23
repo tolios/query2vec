@@ -7,6 +7,7 @@ import json
 import torch
 from utils import load
 from graph import qa_dataset
+from config import DEVICE
 
 #parser for all arguments!
 parser = argparse.ArgumentParser(description='Testing query embeddings...')
@@ -91,6 +92,8 @@ test = qa_dataset(test_data)
 
 #load model...
 model, model_dict = load(SAVE_PATH, module.Model)
+#put model to device 
+model.to(DEVICE)
 
 if filtering:
     # filter = Filter(train, val, test, big = args.big)
@@ -106,7 +109,7 @@ from os.path import exists
 file_existed = exists(path+"/test.txt") 
 
 if metric_ == 'mean_rank':
-    result = mean_rank(test, model, batch_size = batch_size)
+    result = mean_rank(test, model, batch_size = batch_size, device=DEVICE)
     with open(path+"/test.txt", "a") as myfile:
         if not file_existed:
             #only runs the first time!
@@ -114,7 +117,7 @@ if metric_ == 'mean_rank':
         s = 'Filt.' if filtering else 'Raw'
         myfile.write(f'{s} mean rank = {"{:.2f}".format(result)}\n')
 elif metric_ == 'hits@':
-    result = hits_at_N(test, model, N=N, batch_size = batch_size)
+    result = hits_at_N(test, model, N=N, batch_size = batch_size, device=DEVICE)
     with open(path+"/test.txt", "a") as myfile:
         if not file_existed:
             #only runs the first time!
