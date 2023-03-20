@@ -1,0 +1,14 @@
+name: graph_env
+channels:
+    - conda-forge
+    - defaults
+dependencies:
+- pytorch
+- pandas
+- torchinfo
+- pytables
+- matplotlib
+- tensorboard
+- numpy
+- dash
+- tqdm
