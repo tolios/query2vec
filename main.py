@@ -34,7 +34,7 @@ parser.add_argument("save_path",
 parser.add_argument("--pretrained",action=argparse.BooleanOptionalAction,
                     help="If True, it means we will train again!")
 parser.add_argument("--algorithm",
-                    default='experiment',
+                    default='rgcn',
                     type=str, help="Embedding algorithm (stored in algorithms folder!)")
 parser.add_argument("--seed",
                     default=42,
@@ -55,7 +55,7 @@ parser.add_argument("--val_batch_size",
                     default=1024,
                     type=int, help="Validation data batch size")
 parser.add_argument("--lr",
-                    default=0.1,
+                    default=0.01,
                     type=float, help="Learning rate")
 parser.add_argument("--weight_decay",
                     default=0.0,
@@ -78,7 +78,7 @@ if args.json_model:
         updated_args = updated_args['model_params']
 else:
     #no updates! Preset architecture...
-    algorithm = 'experiment'
+    algorithm = 'rgcn'
     updated_args = {}
 #custom parsed arguments from Model kwargs!!!
 #given module... algorithm argument

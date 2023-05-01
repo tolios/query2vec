@@ -20,7 +20,7 @@ parser.add_argument("metric",
                     type=str, help="Metric to be used for testing!")
 #optional requirements!
 parser.add_argument("--algorithm",
-                    default='experiment',
+                    default='rgcn',
                     type=str, help="Embedding algorithm (stored in algorithms folder!)")
 parser.add_argument("--N",
                     default=10,

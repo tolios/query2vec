@@ -20,9 +20,9 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
             scores = model.predict(q, comp, unsqueeze=True) #unsqueeze for shape
             a = a.view(-1, 1)
             #calculating indices for sorting...
-            _, _indices = torch.sort(scores, dim = 1)
-            #adding index places...
-            mean += torch.sum(torch.eq(_indices,a).nonzero()[:, 1]).item()
+            _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
+            #adding index places... +1 very important for correct positioning!!!
+            mean += torch.sum(torch.eq(_indices+1,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
 def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, device=torch.device('cpu')):
@@ -46,8 +46,8 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
             scores = model.predict(q, comp, unsqueeze=True) #unsqueeze for shape
             a = a.view(-1, 1)
             #calculating indices for topk...
-            _, _indices = torch.topk(scores, N, dim=1, largest=False)
-            #summing hits...
-            hits += torch.where(torch.eq(_indices, a), one_tensor, zero_tensor).sum().item()
+            _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
+            #summing hits... +1 very important for correct positioning!!!
+            hits += torch.where(torch.eq(_indices+1, a), one_tensor, zero_tensor).sum().item()
         #return total hits over 2*n_queries!
         return hits/(n_queries)

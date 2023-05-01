@@ -71,7 +71,7 @@ class qa_dataset(Dataset):
         super().__init__()
         self.query_path = query_path
         self.qas = self.extract_qas()
-    def __len__(self) -> int:
+    def len(self) -> int:
         return len(self.qas)
     def __getitem__(self, idx):
         return self.get(idx)  # type: ignore
@@ -327,18 +327,16 @@ def corrupted_answer(num_entities, batch_size, start = 1):
     return torch.randint(high=num_entities, size=batch_size)+start
 
 class graph_embedding(nn.Module):
-    def __init__(self, num_entities, num_relationships, emb_dim):
+    def __init__(self, num_entities, emb_dim):
         super().__init__()
         self.entity_emb = nn.Embedding(num_entities+1, emb_dim, padding_idx=0) #entities have a padding of zeros!
-        self.relationship_emb = nn.Embedding(num_relationships, emb_dim)
     def forward(self, g_batch):
         #*  Receives a batch of graphs, containing entity/relationship ids,
         #* returns embedded batch of graphs ...
         x = self.entity_emb(g_batch.x).squeeze(-2)
-        edges = self.relationship_emb(g_batch.edge_attr).squeeze(-2)
         #construct data object...
         return Batch(x=x, edge_index=g_batch.edge_index,
-                edge_attr=edges, batch=g_batch.batch, ptr=g_batch.ptr)
+                edge_attr=g_batch.edge_attr, batch=g_batch.batch, ptr=g_batch.ptr) 
     def embed_entities(self, batch):
         return self.entity_emb(batch)
 
@@ -415,6 +413,7 @@ if __name__ == "__main__":
     info = {
         'train_path': args.train_path,
         'val_path': args.val_path,
+        'test_path': args.test_path,
         'num_entities': len(train.entity2id),
         'num_relationships': len(train.relationship2id), 
         'train_query_orders': args.train_query_orders,
