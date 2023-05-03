@@ -3,44 +3,47 @@ import os
 import torch
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
-from torch.optim import SGD
+from torch.optim import SGD, Adagrad
 from graph import *
 from torch.utils.tensorboard import SummaryWriter
 from utils import save, load
 
-def training(model: torch.nn.Module,
+def training(model: torch.nn.Module, model_dict:dict,
     train: Dataset, val: Dataset, writer: SummaryWriter,
     epochs = 50, batch_size = 1024, val_batch_size = 1024,
-    lr = 0.1, weight_decay = 0.0005, patience = -1, device=torch.device('cpu')):
+    lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
     Returns trained model, training losses, Uncorrupted and Corrupted energies.
     '''
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val, batch_size=val_batch_size, shuffle=True)
-    #optimizers
-    optimizer = SGD(model.parameters(), lr = lr, weight_decay = weight_decay)
-    #training begins...
-    t_start = time.time()
     #put in device...
     model.to(device)
+    model.train()
+    #optimizers
+    optimizer = Adagrad(model.parameters(), lr = lr, weight_decay = weight_decay)
+    if pretrained:
+        #load also optimizer state!
+        optimizer.load_state_dict(model_dict['optimizer_state_dict'])
+    #training begins...
+    t_start = time.time()
     #for early stopping!
     #start with huge number!
     highest_val_score = -1e5
     stop_counter = 1
-    epoch_stop = 0 #keeps track of last epoch of checkpoint...
+    epoch_stop = model_dict.get('epochs', 0) #keeps track of last epoch of checkpoint...
     #getting initial weights...
-    model_dict = model.state_dict()
-    for model_part in model_dict:
-        writer.add_histogram(model_part, model_dict[model_part], 0)
+    for name, model_part in model_dict['state_dict'].items():
+        writer.add_histogram(name, model_part, epoch_stop)
     #training ...
     print('Training begins ...')
-    for epoch in range(1, epochs + 1):
+    for epoch in range(1 + epoch_stop, epochs + 1 + epoch_stop):
         running_loss = 0.0
         running_score = 0.0
         running_corr_score = 0.0
         # #perform normalizations before entering the mini-batch.
-        # model.normalize()
+        model.normalize()
         for i, qa_batch in enumerate(train_loader):
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
@@ -80,9 +83,8 @@ def training(model: torch.nn.Module,
         writer.add_scalar('Corrupted score', running_corr_score/i, epoch)
         writer.add_scalar('Val score', running_val_score/j, epoch)
         #collecting model weights!
-        model_dict = model.state_dict()
-        for model_part in model_dict:
-            writer.add_histogram(model_part, model_dict[model_part], epoch)
+        for name, model_part in model.state_dict().items():
+            writer.add_histogram(name, model_part, epoch)
 
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
         if patience != -1:
@@ -91,7 +93,7 @@ def training(model: torch.nn.Module,
                 highest_val_score = running_val_score/j
                 #save model checkpoint...
                 save(model, [model.num_entities, model.num_relationships], 
-                    model.kwargs, 'checkpoint.pt')
+                    model.kwargs, epoch, optimizer,'checkpoint.pt')
                 epoch_stop = epoch
                 #"zero out" counter
                 stop_counter = 1
@@ -107,7 +109,7 @@ def training(model: torch.nn.Module,
                     #be patient...
                     stop_counter += 1
                     #if in the end of training load from checkpoint!
-                    if epoch == epochs:
+                    if epoch == epochs + epoch_stop:
                         print('Finished during early stopping...')
                         print('Loading from epoch:', epoch_stop)
                         #load model from previous checkpoint!
@@ -119,5 +121,7 @@ def training(model: torch.nn.Module,
         os.remove('checkpoint.pt')
 
     print('Training ends ...')
+    #normalize the embeddings (to be exactly norm2 == 1)
+    model.normalize()
     #returning model as well as writer and actual last epoch (early stopping)...
-    return model, writer, epoch_stop
+    return model, writer, epoch_stop, optimizer

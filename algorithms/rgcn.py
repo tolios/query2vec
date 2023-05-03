@@ -7,7 +7,7 @@ from . import graph_embedding
 
 class Model(nn.Module): 
     def __init__(self, num_entities, num_relationships,
-                emb_dim = 50, conv_dims=[100], linear_dims=[50], margin = 1.0):
+                emb_dim = 50, conv_dims=[100],linear_dims=[50], margin = 1.0):
         super().__init__()
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -20,7 +20,7 @@ class Model(nn.Module):
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
-        self.attention_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships) for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
+        self.attention_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, is_sorted=True) for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
         #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
         self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
@@ -65,11 +65,13 @@ class Model(nn.Module):
             answer.size is (batch_size, n_entities)'''
             embedded_query = embedded_query.unsqueeze(1) 
         return self.score(embedded_query, answer)
-        
+
     def aggregate(self, x, batch_id):
         #* This method receives the batch node embeddings and their corresponding batch member ids,
         #* and aggregates by grouping by the batch member id...
-        # graph_matrix = (batch_id == batch_id.unique().view(-1,1)).float() #define aggregation sum
-        # return graph_matrix@x
         return scatter_add(x, batch_id, dim=0)
-
+    
+    def normalize(self):
+        #with this method, all normalizations are performed.
+        #To be used before mini-batch training in each epoch.
+        self.graph_embedding.normalize()

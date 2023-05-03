@@ -118,7 +118,7 @@ val_qa = qa_dataset(VAL_PATH)
 
 if pretrained:
     #load model!
-    model, model_dict = load(SAVE_PATH+'/model.pth.tar', module.Model)
+    model, model_dict = load(SAVE_PATH+'/model.pth.tar', module.Model, DEVICE)
 else:
     #define new model!
 
@@ -126,12 +126,16 @@ else:
     os.makedirs(SAVE_PATH)
 
     #define trainable embeddings!
-    #! ACCESS info.json to get these!!!
+    with open(os.path.join(id_dir, "info.json"), "r") as file:
+        info = json.load(file)
 
-    num_entities = 14505
-    num_relationships = 237
+    num_entities = info["num_entities"]
+    num_relationships = info["num_relationships"]
 
     model = module.Model(num_entities, num_relationships, **model_args)
+    model_dict = {
+        'state_dict' : model.state_dict()
+    }
 
 #! fix, train (q, a) where q contains many!
 #writer.add_graph(model, (train[:10], train[10:20]))
@@ -150,9 +154,9 @@ writer = SummaryWriter(log_dir=f'./run_{n}')
 
 start = time.time()
 #training begins...
-model, writer, actual_epochs = training(model, train_qa, val_qa, writer, device=DEVICE,
-                epochs = EPOCHS, batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
-                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
+model, writer, actual_epochs, optimizer = training(model, model_dict, train_qa, val_qa, writer, 
+            device=DEVICE, epochs = EPOCHS, batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
+            lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
 
 writer.close()
 end = time.time()
@@ -163,9 +167,11 @@ os.chdir(cwd)
 #save model!
 #create folder containing embeddings
 if not pretrained:
-    save(model, [num_entities, num_relationships], model_args, SAVE_PATH+'/model.pth.tar')
+    save(model, [num_entities, num_relationships], 
+        model_args, actual_epochs, optimizer ,SAVE_PATH+'/model.pth.tar')
 else: #! maybe add a replace or not utility! (not lose the old one...)
-    save(model, model_dict['args'], model_dict['kwargs'], SAVE_PATH+'/model.pth.tar')
+    save(model, model_dict['args'], 
+        model_dict['kwargs'], actual_epochs, optimizer, SAVE_PATH+'/model.pth.tar')
 # save train configuration!
 with open(SAVE_PATH+f'/train_config_{n}.txt', 'w') as file:
     file.write(f'SEED: {args.seed}\n')

@@ -1,6 +1,6 @@
 import torch
 
-def save(model: torch.nn.Module, args: list, kwargs:dict, path:str)->None:
+def save(model: torch.nn.Module, args: list, kwargs:dict, epochs:int ,optimizer, path:str)->None:
     '''
     General save function for gnn Model(s). 
     It expects the model is defined ONLY by n_entities, n_relationships. Rest are kwargs...
@@ -8,18 +8,20 @@ def save(model: torch.nn.Module, args: list, kwargs:dict, path:str)->None:
     _dict = {
         'state_dict' : model.state_dict(),
         'args': args,
-        'kwargs': kwargs
+        'kwargs': kwargs,
+        'epochs': epochs,
+        'optimizer_state_dict' : optimizer.state_dict()
     }
 
     torch.save(_dict, path)
 
-def load(path:str, model_class:torch.nn.Module)->torch.nn.Module:
+def load(path:str, model_class:torch.nn.Module, device: torch.device)->tuple[torch.nn.Module, dict]:
     '''
     General load function for gnn Model(s).
     It receives a path and corresponding model type, and returns loaded model!
     '''
     #get info
-    _dict = torch.load(path)
+    _dict = torch.load(path, map_location=device)
     #create model with specified architecture
     model = model_class(*_dict['args'], **_dict['kwargs'])
     #load weights...

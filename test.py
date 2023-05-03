@@ -91,7 +91,8 @@ id_dir=os.path.dirname(test_data)
 test = qa_dataset(test_data)
 
 #load model...
-model, model_dict = load(SAVE_PATH, module.Model)
+model, model_dict = load(SAVE_PATH, module.Model, DEVICE)
+model.eval()
 #put model to device 
 model.to(DEVICE)
 

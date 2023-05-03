@@ -5,6 +5,7 @@ from tqdm import tqdm
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
     with torch.no_grad():
+        plus = torch.tensor([1], dtype=torch.long)
         mean = 0.
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
@@ -22,11 +23,12 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
             #calculating indices for sorting...
             _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
             #adding index places... +1 very important for correct positioning!!!
-            mean += torch.sum(torch.eq(_indices+1,a).nonzero()[:, 1]).item()
+            mean += torch.sum(torch.eq(_indices+plus,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
 def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, device=torch.device('cpu')):
     with torch.no_grad():
+        plus = torch.tensor([1], dtype=torch.long)
         hits = 0
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
@@ -48,6 +50,6 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
             #calculating indices for topk...
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
             #summing hits... +1 very important for correct positioning!!!
-            hits += torch.where(torch.eq(_indices+1, a), one_tensor, zero_tensor).sum().item()
+            hits += torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum().item()
         #return total hits over 2*n_queries!
         return hits/(n_queries)
