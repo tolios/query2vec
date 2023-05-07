@@ -4,8 +4,9 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
+    model.eval() #set for eval
     with torch.no_grad():
-        plus = torch.tensor([1], dtype=torch.long)
+        plus = torch.tensor([1], dtype=torch.long, device=device)
         mean = 0.
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
@@ -18,7 +19,7 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
                 #last batch...
                 comp = comp[:a.shape[0]]
             #calculating scores...
-            scores = model.predict(q, comp, unsqueeze=True) #unsqueeze for shape
+            scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
             a = a.view(-1, 1)
             #calculating indices for sorting...
             _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
@@ -27,8 +28,9 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
         return mean/(n_queries)
 
 def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, device=torch.device('cpu')):
+    model.eval() #set for eval
     with torch.no_grad():
-        plus = torch.tensor([1], dtype=torch.long)
+        plus = torch.tensor([1], dtype=torch.long, device=device)
         hits = 0
         n_queries = len(data)
         loader = DataLoader(data, batch_size = batch_size)
@@ -45,7 +47,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
                 #last batch...
                 comp = comp[:a.shape[0]]
             #calculating scores...
-            scores = model.predict(q, comp, unsqueeze=True) #unsqueeze for shape
+            scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
             a = a.view(-1, 1)
             #calculating indices for topk...
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!

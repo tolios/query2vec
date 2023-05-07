@@ -6,9 +6,7 @@ import argparse
 import json
 from tqdm import tqdm
 import torch
-from torch_geometric.data import  Data, Dataset, Batch
-import torch.nn as nn
-from torch.nn.functional import normalize
+from torch_geometric.data import  Data, Dataset
 
 def query2graph(query: list)->Data:
     #*  Receives a query in form of list of triples and 
@@ -326,23 +324,6 @@ class connections():
 
 def corrupted_answer(num_entities, batch_size, start = 1):
     return torch.randint(high=num_entities, size=batch_size)+start
-
-class graph_embedding(nn.Module):
-    def __init__(self, num_entities, emb_dim):
-        super().__init__()                              
-        self.entity_emb = nn.Embedding(num_entities+1, emb_dim, padding_idx=0) #entities have a padding of zeros!(maybe no)
-    def forward(self, g_batch):
-        #*  Receives a batch of graphs, containing entity/relationship ids,
-        #* returns embedded batch of graphs ...
-        x = self.entity_emb(g_batch.x).squeeze(-2)
-        #construct data object...
-        return Batch(x=x, edge_index=g_batch.edge_index,
-                edge_attr=g_batch.edge_attr, batch=g_batch.batch, ptr=g_batch.ptr) 
-    def embed_entities(self, batch):
-        return self.entity_emb(batch)
-    def normalize(self):
-        #speeds up training, by normalizing embeddings!!!
-        self.entity_emb.weight.data = normalize(self.entity_emb.weight.data, dim = 1, p = 2)
 
 if __name__ == "__main__":
 

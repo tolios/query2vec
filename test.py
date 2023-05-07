@@ -1,20 +1,19 @@
-import os
 import argparse
-import importlib
-# from triplets import *
 from metrics import *
-import json
-import torch
-from utils import load
 from graph import qa_dataset
-from config import DEVICE
+from config import DEVICE, URI
+from torch_geometric.seed import seed_everything
+from mlflow import set_tracking_uri, log_dict, start_run
+from mlflow.pytorch import load_model
 
 #parser for all arguments!
 parser = argparse.ArgumentParser(description='Testing query embeddings...')
 
 #requirement arguments...
-parser.add_argument("save_path",
-                    type=str, help="Directory where model is saved")
+parser.add_argument("run_id",
+                    type=str, help="Run id of a model")
+parser.add_argument("test_dict",
+                    type=str, help="Test dict containing results")
 parser.add_argument("metric",
                     choices=['mean_rank', 'hits@'],
                     type=str, help="Metric to be used for testing!")
@@ -31,68 +30,36 @@ parser.add_argument("--test_data",
 parser.add_argument("--filtering",
                     default = False,
                     type=bool, help="Filter out true answers, that artificially lower the scores...")
-
-# parser.add_argument("--train_data",
-#                     default='./FB15k_237/train.txt',
-#                     type=str, help="Path to training data (used for filtering)")
-
-# parser.add_argument("--val_data",
-#                     default='./FB15k_237/valid.txt',
-#                     type=str, help="Path to validation data (used for filtering)")
-
 parser.add_argument("--big",
                     default='10e5',
                     type=float, help="Value of mask, so as to filter out golden triples")
-
 parser.add_argument("--batch_size",
                     default=64,
                     type=int, help="Test batch size")
-
 parser.add_argument("--seed",
                     default=42,
                     type=int, help="Seed for randomness")
-
 #finds all arguments...
 args = parser.parse_args()
 
-SAVE_PATH = args.save_path
+SEED = args.seed
+MODEL_URI = "runs:/"+args.run_id+"/model"
 ALGORITHM = args.algorithm
-metric_ = args.metric
+METRIC = args.metric
 filtering = args.filtering
 test_data = args.test_data
-# train_data = args.train_data
-# val_data = args.val_data
 N = args.N
 batch_size = args.batch_size
 
 #seeds
-torch.manual_seed(args.seed)
+seed_everything(SEED)
 
-#import algorithm
-module = importlib.import_module('algorithms.'+args.algorithm, ".")
+test = qa_dataset(test_data) #get test data
 
-#directory where triplets are stored... as well as ids!
-id_dir=os.path.dirname(test_data)
-
-# #data
-# if filtering:
-#     #training
-#     train = Triplets(path = train_data, unique_objects = unique_objects,
-#                             unique_relationships = unique_relationships)
-
-#     #validation
-#     val =  Triplets(path = val_data, unique_objects = unique_objects,
-#                             unique_relationships = unique_relationships)
-# #test
-# test =  Triplets(path = test_data, unique_objects = unique_objects,
-#                         unique_relationships = unique_relationships)
-
-
-test = qa_dataset(test_data)
+set_tracking_uri(URI) #sets uri for mlflow!
 
 #load model...
-model, model_dict = load(SAVE_PATH, module.Model, DEVICE)
-model.eval()
+model = load_model(MODEL_URI)
 #put model to device 
 model.to(DEVICE)
 
@@ -102,28 +69,17 @@ if filtering:
 else:
     filter = None
 
-path=os.path.dirname(SAVE_PATH)
-model_file = os.path.basename(SAVE_PATH)
-
-from os.path import exists
-
-file_existed = exists(path+"/test.txt") 
-
-if metric_ == 'mean_rank':
+if METRIC == 'mean_rank':
     result = mean_rank(test, model, batch_size = batch_size, device=DEVICE)
-    with open(path+"/test.txt", "a") as myfile:
-        if not file_existed:
-            #only runs the first time!
-            myfile.write(f'Test results for: {model_file} \n')
-        s = 'Filt.' if filtering else 'Raw'
-        myfile.write(f'{s} mean rank = {"{:.2f}".format(result)}\n')
-elif metric_ == 'hits@':
-    result = hits_at_N(test, model, N=N, batch_size = batch_size, device=DEVICE)
-    with open(path+"/test.txt", "a") as myfile:
-        if not file_existed:
-            #only runs the first time!
-            myfile.write(f'Test results for: {model_file} \n')   
-        s = 'Filt.' if filtering else 'Raw'
-        myfile.write(f'{s} hits@{N} = {"{:.2f}".format(result*100)}%\n')
+elif METRIC == 'hits@':
+    result = hits_at_N(test, model, N=N, batch_size = batch_size, device=DEVICE)*100
 else:
-    raise
+    raise KeyError('No such metric available. Use: "mean_rank" or "hits@"')
+
+with start_run(run_id=args.run_id):
+    log_dict({
+        "metric": METRIC,
+        "filtering": filtering,
+        "result": result,
+        "test_data": test_data
+    }, artifact_file="tests/"+args.test_dict)

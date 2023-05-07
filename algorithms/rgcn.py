@@ -3,11 +3,11 @@ from torch_geometric.nn.conv import FastRGCNConv
 from torch_scatter import scatter_add
 import torch
 import torch.nn as nn
-from . import graph_embedding
+from .base import graph_embedder, graph_embedding
 
-class Model(nn.Module): 
+class Model(graph_embedder, nn.Module): 
     def __init__(self, num_entities, num_relationships,
-                emb_dim = 50, conv_dims=[100],linear_dims=[50], margin = 1.0):
+                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
         super().__init__()
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -15,13 +15,15 @@ class Model(nn.Module):
             'emb_dim': emb_dim,
             'conv_dims': conv_dims,
             'linear_dims': linear_dims,
+            'p': 0.2,
             'margin': margin,
         }
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
-        self.attention_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, is_sorted=True) for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
+        self.conv_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, is_sorted=True) for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
+        self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
         #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
         self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
         self.register_buffer('target', torch.tensor([1], dtype=torch.long))
@@ -35,6 +37,7 @@ class Model(nn.Module):
         loss = self.criterion(golden_score, corrupted_score, self.target)
         return loss, golden_score, corrupted_score
 
+     #! should not be here ?
     def score(self, query_embs, answers):
         #* Embed answer nodes, then calculate score!
         answers = self.graph_embedding.embed_entities(answers)
@@ -44,27 +47,17 @@ class Model(nn.Module):
     def embed_query(self, batch):
         batch = self.graph_embedding(batch)
         x, edge_index, edge_attr, batch_id = batch.x, batch.edge_index, batch.edge_attr, batch.batch
-        for layer in self.attention_layers:
+        for layer in self.conv_layers:
             x = layer(x, edge_index=edge_index, edge_type=edge_attr.squeeze(1))
             x = torch.relu(x)
-        for layer in self.linear_layers[:-1]:
+        for layer, dropout in zip(self.linear_layers[:-1], self.dropouts):
             x = layer(x)
             x = torch.relu(x)
+            x = dropout(x)
         #last layer ...
         x = self.linear_layers[-1](x)
         #* return aggregated embedding nodes by batch id...
         return self.aggregate(x, batch_id) #! maybe first aggregate then MLP
-
-    def predict(self, query, answer, unsqueeze=False):
-        #predict score of a query and proposed answer!
-        embedded_query = self.embed_query(query)
-        if unsqueeze:
-            '''If unsqueeze, it expands [batch, query_emb]
-            to [batch, 1, query_emb], so as to anticipate 
-            the change in shape of answer... used when 
-            answer.size is (batch_size, n_entities)'''
-            embedded_query = embedded_query.unsqueeze(1) 
-        return self.score(embedded_query, answer)
 
     def aggregate(self, x, batch_id):
         #* This method receives the batch node embeddings and their corresponding batch member ids,

@@ -1,24 +1,27 @@
 import time
 import os
+from numpy import dtype, int64, float32
 import torch
 from torch_geometric.seed import seed_everything
 from train import training
-from utils import save, load
 from graph import qa_dataset
 import argparse
 import importlib
 import inspect
-from torch.utils.tensorboard.writer import SummaryWriter
 import warnings
-import glob
 import json
-from config import DEVICE
+from config import DEVICE, URI
+from mlflow import log_params, set_tag, start_run, set_tracking_uri, set_experiment, log_param
+from mlflow.pytorch import log_model, log_state_dict, load_model, load_state_dict
+from mlflow.models.signature import ModelSignature
+from mlflow.types.schema import Schema, TensorSpec
 
 #TODO USE COLAB GPU !!! QA FOLDER IS LIGHT!!!
 #TODO Implement nDCG metric
 #! UNDER DEVELOPMENT CHECK ALL
 
 warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)
+warnings.filterwarnings("ignore")
 
 #parser for all arguments!
 parser = argparse.ArgumentParser(description='Training knowledge graph embeddings...',
@@ -27,59 +30,20 @@ parser = argparse.ArgumentParser(description='Training knowledge graph embedding
                                     defined inside the algorithms folder. For example, if --algorithm=transe,
                                     then all kwargs defined in the transe.Model class, can be changed i.e --norm=1
                                         ''')
-#requirement arguments...
-parser.add_argument("save_path",
-                    type=str, help="Directory where model is saved")
-#optional arguments...
-parser.add_argument("--pretrained",action=argparse.BooleanOptionalAction,
-                    help="If True, it means we will train again!")
-parser.add_argument("--algorithm",
-                    default='rgcn',
-                    type=str, help="Embedding algorithm (stored in algorithms folder!)")
-parser.add_argument("--seed",
-                    default=42,
-                    type=int, help="Seed for randomness")
-parser.add_argument("--train_data",
-                    default='./datasets/FB15k_237/qa/train_qa.txt',
-                    type=str, help="Path to training data")
-parser.add_argument("--val_data",
-                    default='./datasets/FB15k_237/qa/val_qa.txt',
-                    type=str, help="Path to validation data")
-parser.add_argument("--epochs",
-                    default=5,
-                    type=int, help="Number of training epochs")
-parser.add_argument("--train_batch_size",
-                    default=1024,
-                    type=int, help="Training data batch size")
-parser.add_argument("--val_batch_size",
-                    default=1024,
-                    type=int, help="Validation data batch size")
-parser.add_argument("--lr",
-                    default=0.01,
-                    type=float, help="Learning rate")
-parser.add_argument("--weight_decay",
-                    default=0.0,
-                    type=float, help="Weight decay")
-parser.add_argument("--patience",
-                    default=-1,
-                    type=int, help="Patience for early stopping")
-parser.add_argument("--json_model",
-                    default="",
+parser.add_argument("json_config",
+                    type=str, help="Training configuration json file...")
+parser.add_argument("json_model",
                     type=str, help="Model architecture json file...")
 
 #finds all arguments...
 args = parser.parse_args()
 
 #load model.json
-if args.json_model:
-    with open(args.json_model, 'r') as f:
-        updated_args = json.load(f)
-        algorithm = updated_args['model_type']
-        updated_args = updated_args['model_params']
-else:
-    #no updates! Preset architecture...
-    algorithm = 'rgcn'
-    updated_args = {}
+with open(args.json_model, 'r') as f:
+    updated_args = json.load(f)
+    algorithm = updated_args['model_type']
+    updated_args = updated_args['model_params']
+
 #custom parsed arguments from Model kwargs!!!
 #given module... algorithm argument
 module = importlib.import_module('algorithms.'+algorithm, ".")
@@ -90,23 +54,27 @@ model_args = spec_args.args[-len(values):]
 #make arg dictionary
 model_args = {x:updated_args[x] if x in updated_args else y for x, y in zip(model_args, values)}
 
-#seeds
-seed_everything(args.seed)
+with open(args.json_config, 'r') as f:
+    config = json.load(f)
 
 #configs
-TRAIN_PATH = args.train_data
-VAL_PATH = args.val_data
-EPOCHS = args.epochs
-BATCH_SIZE = args.train_batch_size
-VAL_BATCH_SIZE = args.val_batch_size
-LEARNING_RATE = args.lr
-WEIGHT_DECAY = args.weight_decay
-PATIENCE = args.patience
-SAVE_PATH = args.save_path
-algorithm = args.algorithm
-pretrained = args.pretrained
+SEED = config["config"].get("seed", 42)
+TRAIN_PATH = config["config"].get("train_data", './datasets/FB15k_237/qa/train_qa.txt')
+VAL_PATH = config["config"].get("val_data", './datasets/FB15k_237/qa/val_qa.txt')
+EPOCHS = config["config"].get("epochs", 5)
+BATCH_SIZE = config["config"].get("train_batch_size", 1024)
+VAL_BATCH_SIZE = config["config"].get("val_batch_size", 1024)
+LEARNING_RATE = config["config"].get("lr", 0.01)
+WEIGHT_DECAY = config["config"].get("wd", 0.001)
+PATIENCE = config["config"].get("patience", -1)
+pretrained = config["config"].get("pretrained", False)
 
-cwd = os.getcwd()
+#seeds
+seed_everything(SEED)
+
+set_tracking_uri(URI) #sets uri for mlflow!
+
+set_experiment(config["experiment"], config["experiment_id"])
 
 #directory where qas are stored...
 id_dir=os.path.dirname(TRAIN_PATH)
@@ -117,13 +85,12 @@ train_qa = qa_dataset(TRAIN_PATH)
 val_qa = qa_dataset(VAL_PATH)
 
 if pretrained:
-    #load model!
-    model, model_dict = load(SAVE_PATH+'/model.pth.tar', module.Model, DEVICE)
-else:
-    #define new model!
+    #load model!    
+    #pretrained should end in .../
+    model = load_model(pretrained+"model")
+    optimizer_dict = load_state_dict(pretrained+"optimizer")
 
-    #create save_path containing everything, unless pretrained (already exists!!)!
-    os.makedirs(SAVE_PATH)
+else:
 
     #define trainable embeddings!
     with open(os.path.join(id_dir, "info.json"), "r") as file:
@@ -133,67 +100,39 @@ else:
     num_relationships = info["num_relationships"]
 
     model = module.Model(num_entities, num_relationships, **model_args)
-    model_dict = {
-        'state_dict' : model.state_dict()
-    }
+    optimizer_dict = {}
 
-#! fix, train (q, a) where q contains many!
-#writer.add_graph(model, (train[:10], train[10:20]))
-
-#change to the model directory...
-os.chdir(SAVE_PATH)
-
-#set #of runs!
-if not pretrained:
-    n = 1
-else:
-    n = len(glob.glob('./run_*'))+1
-
-#init SummaryWriter
-writer = SummaryWriter(log_dir=f'./run_{n}')
-
-start = time.time()
 #training begins...
-model, writer, actual_epochs, optimizer = training(model, model_dict, train_qa, val_qa, writer, 
-            device=DEVICE, epochs = EPOCHS, batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
-            lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
+with start_run(run_name=config["run"]):
+    set_tag("algorithm", algorithm)
+    log_params(model_args)
+    log_params(config["config"])
+    model, final_epoch, optimizer = training(model, optimizer_dict, train_qa, val_qa,
+                device=DEVICE, epochs = EPOCHS,
+                batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
+                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
+    log_param("final_epoch", final_epoch)
+    
+    #! move somewhere relevant to the model?
+    input_schema = Schema(
+        [
+            TensorSpec(dtype(int64), (-1, 1), "x"),
+            TensorSpec(dtype(int64), (2, -1), "edge_index"),
+            TensorSpec(dtype(int64), (-1, 1), "edge_attr"),
+            TensorSpec(dtype(int64), (-1,), "batch"),
+            TensorSpec(dtype(int64), (-1,), "ptr")
+        ]
+    )
+    output_schema = Schema([TensorSpec(dtype(float32), (-1, model.kwargs["emb_dim"]))])
+    signature = ModelSignature(inputs=input_schema, outputs=output_schema)
 
-writer.close()
-end = time.time()
-
-#go back...
-os.chdir(cwd)
-
-#save model!
-#create folder containing embeddings
-if not pretrained:
-    save(model, [num_entities, num_relationships], 
-        model_args, actual_epochs, optimizer ,SAVE_PATH+'/model.pth.tar')
-else: #! maybe add a replace or not utility! (not lose the old one...)
-    save(model, model_dict['args'], 
-        model_dict['kwargs'], actual_epochs, optimizer, SAVE_PATH+'/model.pth.tar')
-# save train configuration!
-with open(SAVE_PATH+f'/train_config_{n}.txt', 'w') as file:
-    file.write(f'SEED: {args.seed}\n')
-    file.write(f'TRAIN_PATH: {TRAIN_PATH}\n')
-    file.write(f'VAL_PATH: {VAL_PATH}\n')
-    #! ACCESS info.json (contained in FB15k_237/qa/ )
-    # file.write(f'NUM_EMBEDDINGS_OBJECT: {train.n_objects}\n')
-    # file.write(f'NUM_EMBEDDINGS_RELATIONSHIP: {train.n_relationships}\n')
-    file.write(f'EPOCHS: {EPOCHS}\n')
-    file.write(f'ACTUAL_EPOCHS: {actual_epochs}\n')
-    file.write(f'PATIENCE: {PATIENCE}\n')
-    file.write(f'BATCH_SIZE: {BATCH_SIZE}\n')
-    file.write(f'VAL_BATCH_SIZE: {VAL_BATCH_SIZE}\n')
-    file.write(f'LEARNING_RATE: {LEARNING_RATE}\n')
-    file.write(f'WEIGHT_DECAY: {WEIGHT_DECAY}\n')
-    file.write(f'Training time: {"{:.4f}".format((end-start)/60)} min(s)')
-
-#model architecture...
-if not pretrained:
-    with open(SAVE_PATH+'/model_arch.json', 'w') as f:
-        model_args = {
-            'model_type': algorithm,
-            'model_params': model_args
-        }
-        json.dump(model_args, f, sort_keys=True, indent=2)
+    #logging model!    
+    log_model(
+            model, 
+            "model",
+            signature=signature
+        )
+    #logging optimizer!
+    log_state_dict(
+        optimizer.state_dict(), "optimizer"
+    )
