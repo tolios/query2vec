@@ -6,8 +6,11 @@ import torch.nn as nn
 from .base import graph_embedder, graph_embedding
 
 class Model(graph_embedder, nn.Module): 
+
+    # Read InfoNCE paper: https://arxiv.org/pdf/1807.03748v2.pdf
+
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
-                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
+                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0, T = 0.01):
         super().__init__()
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -19,6 +22,7 @@ class Model(graph_embedder, nn.Module):
             'linear_dims': linear_dims,
             'p': 0.2,
             'margin': margin,
+            'T': T
         }
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
@@ -28,17 +32,15 @@ class Model(graph_embedder, nn.Module):
                             for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
-        #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
-        self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
-        self.register_buffer('target', torch.tensor([1], dtype=torch.long))
+        self.register_buffer('T', torch.tensor([1], dtype=torch.long)) #temperature!
 
     def forward(self, batch, answers, corrupted):
         #* Main method of the class used for training...
         batch = self.embed_query(batch) #calculate query embedding
         golden_score = self.score(batch, answers)
         corrupted_score = self.score(batch, corrupted)
-        #now return loss!
-        loss = self.criterion(golden_score, corrupted_score, self.target)
+        #now return loss (infoNCE !!!) (opposite since we minimize)
+        loss = -torch.log(torch.sigmoid((golden_score - corrupted_score)/self.T))
         return loss, golden_score, corrupted_score
 
     #! should not be here ?

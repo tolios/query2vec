@@ -3,6 +3,8 @@ from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
+#! Implement NDCG !!! and filtering!
+
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():

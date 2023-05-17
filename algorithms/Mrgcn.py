@@ -7,7 +7,7 @@ from .base import graph_embedder, graph_embedding
 
 class Model(graph_embedder, nn.Module): 
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
-                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
+            emb_dim = 50, heads=3, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
         super().__init__()
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -19,6 +19,7 @@ class Model(graph_embedder, nn.Module):
             'linear_dims': linear_dims,
             'p': 0.2,
             'margin': margin,
+            'heads': heads
         }
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
@@ -26,10 +27,12 @@ class Model(graph_embedder, nn.Module):
         self.conv_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, 
                         num_bases=num_bases, num_blocks=num_blocks, is_sorted=True) \
                             for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
-        self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
+        self.linear_layers = nn.ModuleList([nn.Linear(l, r) \
+                for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[heads*emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
         #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
         self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
+        self.reshaper = lambda x: x.reshape(-1, heads, emb_dim)
         self.register_buffer('target', torch.tensor([1], dtype=torch.long))
 
     def forward(self, batch, answers, corrupted):
@@ -45,8 +48,11 @@ class Model(graph_embedder, nn.Module):
     def score(self, query_embs, answers):
         #* Embed answer nodes, then calculate score!
         answers = self.graph_embedding.embed_entities(answers)
+        answers = answers.unsqueeze(-2)
         norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answers, p = 2, dim = -1) # type: ignore
-        return torch.sum(query_embs*answers, dim=-1)/norm
+        scores = torch.sum(query_embs*answers, dim=-1)/norm
+        #get max of those scores...
+        return torch.max(scores, -1)[0]
 
     def embed_query(self, batch):
         batch = self.graph_embedding(batch)
@@ -60,8 +66,12 @@ class Model(graph_embedder, nn.Module):
             x = dropout(x)
         #last layer ...
         x = self.linear_layers[-1](x)
-        #* return aggregated embedding nodes by batch id...
-        return self.aggregate(x, batch_id) #! maybe first aggregate then MLP
+        #aggregate
+        x = self.aggregate(x, batch_id)
+        #reshape to [-1, heads, emb]
+        x = self.reshaper(x)
+
+        return x
 
     def aggregate(self, x, batch_id):
         #* This method receives the batch node embeddings and their corresponding batch member ids,

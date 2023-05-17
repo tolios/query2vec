@@ -1,4 +1,3 @@
-import time
 import os
 from numpy import dtype, int64, float32
 import torch
@@ -74,7 +73,7 @@ seed_everything(SEED)
 
 set_tracking_uri(URI) #sets uri for mlflow!
 
-set_experiment(config["experiment"], config["experiment_id"])
+set_experiment(config["experiment"])
 
 #directory where qas are stored...
 id_dir=os.path.dirname(TRAIN_PATH)
@@ -103,7 +102,7 @@ else:
     optimizer_dict = {}
 
 #training begins...
-with start_run(run_name=config["run"]):
+with start_run(run_name=config["run"], experiment_id=config["experiment_id"]):
     set_tag("algorithm", algorithm)
     log_params(model_args)
     log_params(config["config"])

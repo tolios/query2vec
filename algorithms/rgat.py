@@ -1,13 +1,14 @@
 from __future__ import annotations
-from torch_geometric.nn.conv import FastRGCNConv
+from torch_geometric.nn.conv import RGATConv
 from torch_scatter import scatter_add
 import torch
 import torch.nn as nn
 from .base import graph_embedder, graph_embedding
 
 class Model(graph_embedder, nn.Module): 
-    def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
-                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
+    def __init__(self, num_entities, num_relationships,
+                emb_dim = 50, conv_dims=[100], num_bases = None, num_blocks = None,
+                linear_dims=[50], p=0.2, margin = 1.0):
         super().__init__()
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -23,9 +24,9 @@ class Model(graph_embedder, nn.Module):
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
-        self.conv_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, 
-                        num_bases=num_bases, num_blocks=num_blocks, is_sorted=True) \
-                            for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
+        self.conv_layers = nn.ModuleList([RGATConv(l, r, num_relationships, 
+                    num_bases=num_bases, num_blocks=num_blocks,is_sorted=True) \
+                        for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
         #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
@@ -41,7 +42,7 @@ class Model(graph_embedder, nn.Module):
         loss = self.criterion(golden_score, corrupted_score, self.target)
         return loss, golden_score, corrupted_score
 
-    #! should not be here ?
+     #! should not be here ?
     def score(self, query_embs, answers):
         #* Embed answer nodes, then calculate score!
         answers = self.graph_embedding.embed_entities(answers)
