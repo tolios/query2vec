@@ -322,8 +322,8 @@ class connections():
                     if tries > tot_tries:
                         print(f'Exceeted tot_tries = {tot_tries}')
 
-def corrupted_answer(num_entities, batch_size, start = 1):
-    return torch.randint(high=num_entities, size=batch_size)+start
+def corrupted_answer(num_entities, batch_size, num_negs=1,start = 1):
+    return torch.randint(high=num_entities, size=(batch_size[0], num_negs))+start
 
 if __name__ == "__main__":
 

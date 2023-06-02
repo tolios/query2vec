@@ -10,7 +10,7 @@ from mlflow import log_metrics
 
 def training(model: torch.nn.Module, optimizer_dict:dict,
     train: Dataset, val: Dataset,
-    epochs = 50, batch_size = 1024, val_batch_size = 1024,
+    epochs = 50, batch_size = 1024, val_batch_size = 1024, num_negs = 1,
     lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
@@ -45,7 +45,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), start = 1)
+            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs,start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)

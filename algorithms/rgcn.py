@@ -3,12 +3,12 @@ from torch_geometric.nn.conv import FastRGCNConv
 from torch_scatter import scatter_add
 import torch
 import torch.nn as nn
-from .base import graph_embedder, graph_embedding
+from .base import qa_embedder
 
-class Model(graph_embedder, nn.Module): 
+class Model(qa_embedder): 
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
                 emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0):
-        super().__init__()
+        super().__init__(num_entities, emb_dim)
         self.num_entities = num_entities
         self.num_relationships = num_relationships
         self.kwargs = {
@@ -20,8 +20,6 @@ class Model(graph_embedder, nn.Module):
             'p': 0.2,
             'margin': margin,
         }
-        #Model weights!
-        self.graph_embedding = graph_embedding(num_entities, emb_dim)
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
         self.conv_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, 
                         num_bases=num_bases, num_blocks=num_blocks, is_sorted=True) \
@@ -31,25 +29,15 @@ class Model(graph_embedder, nn.Module):
         #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
         self.criterion = nn.MarginRankingLoss(margin=margin, reduction='none')
         self.register_buffer('target', torch.tensor([1], dtype=torch.long))
+    
+    def loss(self, golden_score, corrupted_score):
+        return self.criterion(golden_score, corrupted_score, self.target)
 
-    def forward(self, batch, answers, corrupted):
-        #* Main method of the class used for training...
-        batch = self.embed_query(batch) #calculate query embedding
-        golden_score = self.score(batch, answers)
-        corrupted_score = self.score(batch, corrupted)
-        #now return loss!
-        loss = self.criterion(golden_score, corrupted_score, self.target)
-        return loss, golden_score, corrupted_score
+    def _score(self, query_embs, answer_embs):
+        norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answer_embs, p = 2, dim = -1) # type: ignore
+        return torch.sum(query_embs*answer_embs, dim=-1)/norm
 
-    #! should not be here ?
-    def score(self, query_embs, answers):
-        #* Embed answer nodes, then calculate score!
-        answers = self.graph_embedding.embed_entities(answers)
-        norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answers, p = 2, dim = -1) # type: ignore
-        return torch.sum(query_embs*answers, dim=-1)/norm
-
-    def embed_query(self, batch):
-        batch = self.graph_embedding(batch)
+    def _embed_query(self, batch):
         x, edge_index, edge_attr, batch_id = batch.x, batch.edge_index, batch.edge_attr, batch.batch
         for layer in self.conv_layers:
             x = layer(x, edge_index=edge_index, edge_type=edge_attr.squeeze(1))
@@ -67,8 +55,3 @@ class Model(graph_embedder, nn.Module):
         #* This method receives the batch node embeddings and their corresponding batch member ids,
         #* and aggregates by grouping by the batch member id...
         return scatter_add(x, batch_id, dim=0)
-    
-    def normalize(self):
-        #with this method, all normalizations are performed.
-        #To be used before mini-batch training in each epoch.
-        self.graph_embedding.normalize()

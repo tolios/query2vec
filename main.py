@@ -66,6 +66,7 @@ VAL_BATCH_SIZE = config["config"].get("val_batch_size", 1024)
 LEARNING_RATE = config["config"].get("lr", 0.01)
 WEIGHT_DECAY = config["config"].get("wd", 0.001)
 PATIENCE = config["config"].get("patience", -1)
+NUM_NEGS = config["config"].get("num_negs", 1)
 pretrained = config["config"].get("pretrained", False)
 
 #seeds
@@ -108,7 +109,7 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]):
     log_params(config["config"])
     model, final_epoch, optimizer = training(model, optimizer_dict, train_qa, val_qa,
                 device=DEVICE, epochs = EPOCHS,
-                batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE,
+                batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,
                 lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
     log_param("final_epoch", final_epoch)
     
