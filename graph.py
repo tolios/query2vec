@@ -225,7 +225,7 @@ class connections():
                 #self loops are killed on the spot...
                 return [], answer
             if (h, r, t) in known_link:
-                #since it generated the same link twice, simply reject...
+                #since it generated the same link twice, simply reject... (guarrantees n edges)
                 return [], answer
             else:
                 known_link.add((h, r, t))
@@ -267,7 +267,6 @@ class connections():
             h, r, t = link
             h = variables[h] if h in variables else h
             t = variables[t] if t in variables else t
-            r = r
             true_query.append([h, r, t])
 
         return true_query, answer
