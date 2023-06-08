@@ -15,7 +15,7 @@ parser.add_argument("run_id",
 parser.add_argument("test_dict",
                     type=str, help="Test dict containing results")
 parser.add_argument("metric",
-                    choices=['mean_rank', 'hits@'],
+                    choices=['mean_rank', 'hits@', 'mrr', 'ndcg'],
                     type=str, help="Metric to be used for testing!")
 #optional requirements!
 parser.add_argument("--algorithm",
@@ -73,6 +73,8 @@ if METRIC == 'mean_rank':
     result = mean_rank(test, model, batch_size = batch_size, device=DEVICE)
 elif METRIC == 'hits@':
     result = hits_at_N(test, model, N=N, batch_size = batch_size, device=DEVICE)*100
+elif METRIC == 'mrr':
+    result = mean_reciprocal_rank(test, model, batch_size = batch_size, device=DEVICE)*100
 else:
     raise KeyError('No such metric available. Use: "mean_rank" or "hits@"')
 

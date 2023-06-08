@@ -92,18 +92,28 @@ class connections():
     It provides sampling methods. As well as other utilities...
     To be used for extraction of data, as well as query & answer generation (sampling).
 
-    version: 1.0: Might need better sampler...
+    version: 1.1: added inverses | r, r/-1 !!!
+
+    #! Needs better sampler?
+    #! having the same entity, different relation!? A relativeOf B, A neighbourOf B (makes sense?!)
+    ([[3366, 325, '_1'], [3366, 77, '_1']], 3365)
+    ([[400, 9, '_1'], [118, 9, '_1']], 9678)
     '''
-    def __init__(self, path: str, entity2id: dict = dict(), relationship2id: dict = dict(), start: int = 1):
+    def __init__(self, path: str, 
+                entity2id: dict = dict(), 
+                relationship2id: dict = dict(), 
+                start: int = 1,
+                add_inverse=False):
         self.path = path
         if not (entity2id and relationship2id):
             #if any one of them is not defined...
             del entity2id, relationship2id
-            self.entity2id, self.relationship2id = self.extract_mappings(path, start = start)
+            self.entity2id, self.relationship2id = self.extract_mappings(path, start = start, add_inverse = add_inverse)
         else:
             #use given mappings (useful for val and test data...)
             self.entity2id, self.relationship2id = entity2id, relationship2id
-        self._2relationships, self._2heads = self.extract_connections(path, self.entity2id, self.relationship2id)
+        self._2relationships, self._2heads = self.extract_connections(path, self.entity2id, self.relationship2id, add_inverse = add_inverse)
+        self.add_inverse = add_inverse
 
     def __contains__(self, key: tuple)->bool:
         #* key is a triplet (h, r, t)
@@ -116,11 +126,13 @@ class connections():
 
         return False
 
-    def extract_mappings(self, path: str, start: int = 1)->tuple:
+    def extract_mappings(self, path: str, start: int = 1, add_inverse: bool = False)->tuple:
         '''
         Receives a triple file (a training file, that has atleast one of all total entities & relationships)...
         Returns a tuple, with two dictionaries that map entities & relationships to corresponding ids!
         start is used to offset the ids of entities so as the first start-1 ids are unused! For example start=1, we have no id = 0...
+
+        Has the ability to add inverses, if r is the relation, r/-1 is the defined inverse!
         '''
         unique_objects = dict()
         unique_relationships = dict()
@@ -131,7 +143,7 @@ class connections():
         with open(path, 'r') as file:
             for line in file:
                 #tab separated values!!!
-                h, l, t = line.split('\t')
+                h, r, t = line.split('\t')
                 #remove \n
                 t = t[:-1]
                 #we will encode the nodes and edges with unique integers!
@@ -143,14 +155,18 @@ class connections():
                 if t not in unique_objects:
                     unique_objects[t] = id_object
                     id_object += 1
-                if l not in unique_relationships:
-                    unique_relationships[l] = id_relationship
+                if r not in unique_relationships:
+                    unique_relationships[r] = id_relationship
                     id_relationship += 1
-        
+                if add_inverse:
+                    if r+"/-1" not in unique_relationships:
+                        unique_relationships[r+"/-1"] = id_relationship
+                        id_relationship += 1
+
         return unique_objects, unique_relationships
 
     
-    def extract_connections(self, triplet_file: str, entity2id:dict, relationship2id:dict)->tuple:
+    def extract_connections(self, triplet_file: str, entity2id:dict, relationship2id:dict, add_inverse: bool = False)->tuple:
         _2relationships = dict()
         _2heads = dict()
 
@@ -158,6 +174,8 @@ class connections():
             for line in f:
                 h, r, t = line[:-1].split('\t')
                 if h in entity2id and t in entity2id and r in relationship2id:
+                    if add_inverse:
+                        r_inv = relationship2id[r+"/-1"]
                     h, r, t = entity2id[h], relationship2id[r], entity2id[t]
                 else:
                     continue
@@ -173,6 +191,20 @@ class connections():
                     _2heads[(r,t)].add(h)
                 else:
                     _2heads[(r,t)].add(h)
+                #inverses!
+                if add_inverse:
+                    #2relationships
+                    if h not in _2relationships:
+                        _2relationships[h] = set()
+                        _2relationships[h].add(r_inv)
+                    else:
+                        _2relationships[h].add(r_inv)
+                    #2heads
+                    if (r_inv, h) not in _2heads:
+                        _2heads[(r_inv,h)] = set()
+                        _2heads[(r_inv,h)].add(t)
+                    else:
+                        _2heads[(r_inv,h)].add(t)
         #return details
         return _2relationships, _2heads
 
@@ -360,6 +392,9 @@ if __name__ == "__main__":
                 help='''
                     Besides 1hop queries this argument can determine how many qa pairs that have DAGs with a specified num_edges. 
                     Expects a string of the form "[(num_edges, num_queries), ...]. num_edges: int >= 2"''')
+    parser.add_argument("--add_inverse",
+                        type = bool, default=False,
+                help='''Add inverses for all relations in the KG, doubling all relations represented!''')
 
     args = parser.parse_args()
 
@@ -372,9 +407,9 @@ if __name__ == "__main__":
 
     #Make queries...
     #First extract connections and id mappings...
-    train = connections(args.train_path, start=args.start)
-    val = connections(args.val_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start)
-    test = connections(args.test_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start)
+    train = connections(args.train_path, start=args.start, add_inverse=args.add_inverse)
+    val = connections(args.val_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start, add_inverse=args.add_inverse)
+    test = connections(args.test_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start, add_inverse=args.add_inverse)
 
     #save mappings to the qa folder!
     with open(qa_dir+'/entity2id.json', 'w') as f:
@@ -402,7 +437,8 @@ if __name__ == "__main__":
         'num_relationships': len(train.relationship2id), 
         'train_query_orders': args.train_query_orders,
         'val_query_orders': args.val_query_orders,
-        'test_query_orders': args.test_query_orders
+        'test_query_orders': args.test_query_orders,
+        'add_inverse': args.add_inverse
     }
 
     with open(qa_dir+'/info.json', 'w') as f:

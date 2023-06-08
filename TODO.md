@@ -4,8 +4,8 @@ This file contains all needed milestones for completing the thesis project.
 
 ## Required code work
 
-- Possibly required to contain all inverse relations! (r^{-1})
-- find way to identify all equivalent answers (hash?)
+- Possibly required to contain all inverse relations! (r^{-1}) (done ?)
+- find way to identify all equivalent answers (hash?) (? maybe done???)
 - make metrics accurate (hits@K, MeanRank)
 - construct mrr and ndcg metrics!
 - construct box rgcn (rgat)
