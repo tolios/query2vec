@@ -7,6 +7,7 @@ import json
 from tqdm import tqdm
 import torch
 from torch_geometric.data import  Data, Dataset
+from hash import hashQuery
 
 def query2graph(query: list)->Data:
     #*  Receives a query in form of list of triples and 
@@ -59,7 +60,10 @@ def query2graph(query: list)->Data:
     edge_attr = torch.LongTensor(edge_attr).unsqueeze(-1)
 
     #* Return Data...
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    #with hash
+    q_hash = hashQuery(query)
+
+    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, hash=q_hash)
 
 class qa_dataset(Dataset):
     '''

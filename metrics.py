@@ -1,11 +1,82 @@
 import torch
-from torch_geometric.data import Dataset
+from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 #! Implement NDCG !!! and filtering!
+class Filter:
+    '''
+    This class receives train, val and test qa data so as to create a filter function!
+    '''
+    def __init__(self, train: Dataset, val: Dataset, test: Dataset, 
+            n_entities: int, big: int = 10e5):
+        self.n_entities = n_entities
+        self.a_dict = self._create_dict(train, val, test) #answer dict
+        self.big = big
 
-def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
+    def _create_dict(self, train: Dataset, val: Dataset, test: Dataset)->dict:
+        #this function creates a dictionary which uses the query hash
+        #and contains the set of corresponding answers that exist for train, val, test!
+        dict_ = dict()
+        train = DataLoader(train, batch_size=1)
+        for q, a in train:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        test = DataLoader(test, batch_size=1)
+        for q, a in test:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        val = DataLoader(val, batch_size=1)
+        for q, a in val:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        return dict_
+    
+    def mask(self, q: Batch, a: torch.Tensor)->torch.Tensor:
+        '''
+        Using the hashes of queries we will create a mask.
+        The mask will have -big to all entities that are answers
+        except the answer given by "a". All other entities plus the given
+        one will have zero. The mask is to be added to the scores so as to
+        artificially lower the scores, so when ranking they wont be included!
+        '''
+        #first we extract the hashes and the given entities
+        q_hashes = q.hash.tolist()
+        a = a.tolist()
+        #batch mask list
+        batch_mask = []
+        for q_hash, a_ in zip(q_hashes, a):
+            #extract all answers
+            as_ = self.a_dict[q_hash]
+            #remove given entity
+            as_ = as_ - {a_}
+            #mask creation!
+            #first create shape (num_answers - 1, num_entities)
+            mask = torch.arange(1, 1+self.n_entities).expand(len(as_), self.n_entities)
+            #finds the location where each entity is located! (marks as True)
+            mask = mask.eq(torch.Tensor(list(as_)).unsqueeze(1))
+            # .any() makes all of the true entities that are answers to be ignored!
+            mask = mask.any(0)
+            # -big to all correct entities to be ignored!
+            mask = -self.big*mask
+            #add to batch mask
+            batch_mask.append(mask)
+        # stack for batching...
+        return torch.stack(batch_mask, dim=0)
+
+def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -15,13 +86,17 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
-        for q, a in tqdm(loader, desc='Raw mean rank calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean rank calculation'):
             q, a = q.to(device), a.to(device)
             if a.shape[0] != batch_size:
                 #last batch...
                 comp = comp[:a.shape[0]]
             #calculating scores...
             scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for sorting...
             _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
@@ -29,7 +104,7 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=tor
             mean += torch.sum(1+torch.eq(_indices+plus,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
-def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, device=torch.device('cpu')):
+def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -42,7 +117,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
-        for q, a in tqdm(loader, desc=f'Raw hits@{N} calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} calculation'):
             q, a = q.to(device), a.to(device)
             #calculating head and tail energies for prediction
             if a.shape[0] != batch_size:
@@ -50,6 +125,10 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
                 comp = comp[:a.shape[0]]
             #calculating scores...
             scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for topk...
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
@@ -58,7 +137,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, de
         #return total hits over 2*n_queries!
         return hits/(n_queries)
 
-def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, device=torch.device('cpu')):
+def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -68,13 +147,17 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
-        for q, a in tqdm(loader, desc='Raw mean reciprocal rank calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean reciprocal rank calculation'):
             q, a = q.to(device), a.to(device)
             if a.shape[0] != batch_size:
                 #last batch...
                 comp = comp[:a.shape[0]]
             #calculating scores...
             scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for sorting...
             _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!

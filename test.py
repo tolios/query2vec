@@ -1,4 +1,6 @@
 import argparse
+import os
+import json
 from metrics import *
 from graph import qa_dataset
 from config import DEVICE, URI
@@ -27,6 +29,12 @@ parser.add_argument("--N",
 parser.add_argument("--test_data",
                     default='./datasets/FB15k_237/qa/test_qa.txt',
                     type=str, help="Path to test data")
+parser.add_argument("--train_data",
+                    default=None,
+                    type=str, help="Path to train data")
+parser.add_argument("--val_data",
+                    default=None,
+                    type=str, help="Path to val data")
 parser.add_argument("--filtering",
                     default = False,
                     type=bool, help="Filter out true answers, that artificially lower the scores...")
@@ -64,17 +72,33 @@ model = load_model(MODEL_URI)
 model.to(DEVICE)
 
 if filtering:
-    # filter = Filter(train, val, test, big = args.big)
-    pass
+    if not (args.train_data and args.val_data):
+        print("train data and val data REQUIRED when filtering!!!")
+        raise 
+
+    train = qa_dataset(args.train_data)
+    val = qa_dataset(args.test_data)
+
+    #directory where qas are stored...
+    id_dir=os.path.dirname(args.train_data)
+
+    with open(os.path.join(id_dir, "info.json"), "r") as file:
+        info = json.load(file)
+
+    num_entities = info["num_entities"]
+
+    print("creating filter...")
+    filter = Filter(train, val, test, num_entities, big = args.big)
+    print("filter made successfully!")
 else:
     filter = None
 
 if METRIC == 'mean_rank':
-    result = mean_rank(test, model, batch_size = batch_size, device=DEVICE)
+    result = mean_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
 elif METRIC == 'hits@':
-    result = hits_at_N(test, model, N=N, batch_size = batch_size, device=DEVICE)*100
+    result = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
 elif METRIC == 'mrr':
-    result = mean_reciprocal_rank(test, model, batch_size = batch_size, device=DEVICE)*100
+    result = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
 else:
     raise KeyError('No such metric available. Use: "mean_rank" or "hits@"')
 
@@ -83,5 +107,8 @@ with start_run(run_id=args.run_id):
         "metric": METRIC,
         "filtering": filtering,
         "result": result,
-        "test_data": test_data
+        "test_data": test_data,
+        "N": N if METRIC == "hits@" else None,
+        "train_data": args.train_data if filtering else None,
+        "val_data": args.val_data if filtering else None
     }, artifact_file="tests/"+args.test_dict)
