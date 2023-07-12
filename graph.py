@@ -239,7 +239,7 @@ class connections():
         #* It must be a tail of a known link!
         return random.choice(list(self._2relationships))
 
-    def sample_qa(self, num_edges: int = 2, other: connections|None = None)->tuple:
+    def sample_qa(self, num_edges: int = 2, other: connections|None = None, uniques: set = set())->tuple:
         #*  Samples a query (as a dag) and answer, with number of edges as num_edges.
         #* Sometimes, it fails and produces a rejected query, so it outputs ([], answer).
 
@@ -259,10 +259,10 @@ class connections():
             #rejections...
             if h == t:
                 #self loops are killed on the spot...
-                return [], answer
+                return [], answer, uniques
             if (h, r, t) in known_link:
                 #since it generated the same link twice, simply reject... (guarrantees n edges)
-                return [], answer
+                return [], answer, uniques
             else:
                 known_link.add((h, r, t))
             if h in variables:
@@ -272,7 +272,7 @@ class connections():
                 #must order_h > order_t, else cycle!!!
                 if order_h <= order_t:
                     #cycle, therefore reject...
-                    return [], answer
+                    return [], answer, uniques
             #Name new variable for each new entity as tail!
             if t not in variables:
                 vars += 1
@@ -293,10 +293,10 @@ class connections():
             if t not in self._2relationships:
                 #if we do have enough, keep. Else reject!
                 if len(query) != num_edges:
-                    return [], answer
+                    return [], answer, uniques
         #check if query contains one of the required links, else return malformed...
         if not has_required:
-            return [], answer
+            return [], answer, uniques
         #Replace with variables!
         true_query = []
         for link in query:
@@ -305,7 +305,16 @@ class connections():
             t = variables[t] if t in variables else t
             true_query.append([h, r, t])
 
-        return true_query, answer
+        # find if unique qa
+        qa_hash = hash((hashQuery(true_query), answer))
+
+        # unique representation...
+        if qa_hash in uniques:
+            return [], answer, uniques # rejected because qa pair has been already produced!
+        else:
+            uniques.add(qa_hash)
+
+        return true_query, answer, uniques
 
     def generate_1hops(self):
         #* This method yields all 1 hop queries and their answers!
@@ -344,15 +353,13 @@ class connections():
                     pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                     while len(uniques) < num_queries and tries < tot_tries:
                         #generate query...
-                        qa = self.sample_qa(num_edges=num_edges, other=other)
-                        #check if not rejected...
-                        if qa[0]:
-                            qastr = str(qa)
-                            if qastr not in uniques:
-                                uniques.add(qastr)
-                                f.write(qastr+'\n')
-                                pbar.update(1)
-                        tries += 1
+                        q, a, uniques = self.sample_qa(num_edges=num_edges, other=other, uniques=uniques)
+                        #write (q, a) if q non empty
+                        if q:
+                            f.write(str((q, a))+'\n')
+                            pbar.update(1)
+                        else:
+                            tries += 1
                     pbar.close()
                     if tries > tot_tries:
                         print(f'Exceeted tot_tries = {tot_tries}')

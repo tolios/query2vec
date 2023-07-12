@@ -47,6 +47,7 @@ parser.add_argument("--batch_size",
 parser.add_argument("--seed",
                     default=42,
                     type=int, help="Seed for randomness")
+
 #finds all arguments...
 args = parser.parse_args()
 
@@ -71,36 +72,42 @@ model = load_model(MODEL_URI)
 #put model to device 
 model.to(DEVICE)
 
-if filtering:
-    if not (args.train_data and args.val_data):
-        print("train data and val data REQUIRED when filtering!!!")
-        raise 
-
+if METRIC == 'ndcg':
+    filtering = None
     train = qa_dataset(args.train_data)
-    val = qa_dataset(args.test_data)
-
-    #directory where qas are stored...
-    id_dir=os.path.dirname(args.train_data)
-
-    with open(os.path.join(id_dir, "info.json"), "r") as file:
-        info = json.load(file)
-
-    num_entities = info["num_entities"]
-
-    print("creating filter...")
-    filter = Filter(train, val, test, num_entities, big = args.big)
-    print("filter made successfully!")
+    val = qa_dataset(args.val_data)
+    result = NDCG(train, val, test, model)*100
 else:
-    filter = None
+    if filtering:
+        if not (args.train_data and args.val_data):
+            print("train data and val data REQUIRED when filtering!!!")
+            raise 
 
-if METRIC == 'mean_rank':
-    result = mean_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
-elif METRIC == 'hits@':
-    result = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
-elif METRIC == 'mrr':
-    result = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
-else:
-    raise KeyError('No such metric available. Use: "mean_rank" or "hits@"')
+        train = qa_dataset(args.train_data)
+        val = qa_dataset(args.val_data)
+
+        #directory where qas are stored...
+        id_dir=os.path.dirname(args.train_data)
+
+        with open(os.path.join(id_dir, "info.json"), "r") as file:
+            info = json.load(file)
+
+        num_entities = info["num_entities"]
+
+        print("creating filter...")
+        filter = Filter(train, val, test, num_entities, big = args.big)
+        print("filter made successfully!")
+    else:
+        filter = None
+
+    if METRIC == 'mean_rank':
+        result = mean_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
+    elif METRIC == 'hits@':
+        result = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
+    elif METRIC == 'mrr':
+        result = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
+    else:
+        raise KeyError('No such metric available. Use: "mean_rank" or "hits@"')
 
 with start_run(run_id=args.run_id):
     log_dict({
@@ -109,6 +116,6 @@ with start_run(run_id=args.run_id):
         "result": result,
         "test_data": test_data,
         "N": N if METRIC == "hits@" else None,
-        "train_data": args.train_data if filtering else None,
-        "val_data": args.val_data if filtering else None
+        "train_data": args.train_data if (filtering or (METRIC=='ndcg')) else None,
+        "val_data": args.val_data if (filtering or (METRIC=='ndcg')) else None
     }, artifact_file="tests/"+args.test_dict)

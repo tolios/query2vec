@@ -3,7 +3,7 @@ from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-#! Implement NDCG !!! and filtering!
+#! Implement NDCG !!!
 class Filter:
     '''
     This class receives train, val and test qa data so as to create a filter function!
@@ -165,3 +165,75 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
             # 1/ for reciprocal!!!
             mean += torch.sum(1/(1+torch.eq(_indices+plus,a).nonzero()[:, 1])).item()
         return mean/(n_queries)
+    
+#! NEEDS FIXING (NEXT GIT PUSH)
+def NDCG(train: Dataset, val: Dataset, test: Dataset, model: torch.nn.Module)->float:
+    '''
+    NDCG calculates overall how a query ranks all answers and normalizes
+    them using the best possible ranking. (all correct answers first)
+
+    could include an @N mechanism...
+    '''
+    model.eval()
+    #first gather all unique answers and queries...
+    n_entities = model.num_entities
+    dict_ = dict()
+    q_dict = dict()
+    train = DataLoader(train, batch_size=1)
+    print('Gathering q, a pairs...')
+    for q, a in train:
+        q_hash = q.hash.item()
+        a = a.item()
+        if q_hash not in dict_:
+            dict_[q_hash] = {a}
+        else:
+            dict_[q_hash].add(a)
+        if not (q_hash in q_dict):
+            q_dict[q_hash] = q
+    test = DataLoader(test, batch_size=1)
+    for q, a in test:
+        q_hash = q.hash.item()
+        a = a.item()
+        if q_hash not in dict_:
+            dict_[q_hash] = {a}
+        else:
+            dict_[q_hash].add(a)
+        if not (q_hash in q_dict):
+            q_dict[q_hash] = q
+    val = DataLoader(val, batch_size=1)
+    for q, a in val:
+        q_hash = q.hash.item()
+        a = a.item()
+        if q_hash not in dict_:
+            dict_[q_hash] = {a}
+        else:
+            dict_[q_hash].add(a)
+        if not (q_hash in q_dict):
+            q_dict[q_hash] = q
+    print('Done!')
+    #now start calculating...
+    #unfortunately only with batch = 1
+    n = 0
+    with torch.no_grad():
+        ndcg = 0.
+        # the discounted gains to be masked over!
+        dcg = 1/torch.log2(torch.arange(1, 1+n_entities)+1)
+        for q_hash in tqdm(dict_):
+            # find query
+            q = q_dict[q_hash]
+            #extract all answers
+            as_ = dict_[q_hash]
+            n_a = len(as_)
+            #predict scores...
+            scores = model.evaluate(q, torch.arange(1, n_entities + 1).expand(1, -1), unsqueeze=True)
+            #calculating indices for sorting...
+            _, _indices = torch.sort(scores, dim = 1, descending=True)
+            # cast as tensor (position between them not relevant (set))
+            as_ = torch.Tensor(list(as_)).type(torch.int64)
+            as_ = _indices.reshape(-1)[as_-1] # as_ is plus one
+            mas = torch.where(torch.isin(torch.arange(1, 1+n_entities),as_) , 1, 0).reshape(1, -1)
+            mbc = torch.tensor(([1]*n_a)+([0]*(n_entities-n_a))).reshape(1, -1)
+            # ndcg per query
+            ndcg += (torch.sum(mas*dcg)/torch.sum(mbc*dcg)).item()
+
+    return ndcg/(len(dict_))
