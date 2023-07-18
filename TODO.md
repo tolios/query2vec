@@ -4,9 +4,10 @@ This file contains all needed milestones for completing the thesis project.
 
 ## Required code work
 
+- choose how many of one structure to generate, specify test structure filter
 - fix ndcg
 - construct box rgcn (rgat)
-- perhaps link convs with depth of query (?) 1p one conv, 2p two conv, 2i one conv 
+- perhaps link convs with depth of query (?) 1p one conv, 2p two conv, 2i one conv
 
 ## Testings
 

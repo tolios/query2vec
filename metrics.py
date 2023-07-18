@@ -3,7 +3,6 @@ from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-#! Implement NDCG !!!
 class Filter:
     '''
     This class receives train, val and test qa data so as to create a filter function!
@@ -166,7 +165,7 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
             mean += torch.sum(1/(1+torch.eq(_indices+plus,a).nonzero()[:, 1])).item()
         return mean/(n_queries)
     
-#! NEEDS FIXING (NEXT GIT PUSH)
+#! NEEDS FIXING (NEXT NEXT GIT PUSH)
 def NDCG(train: Dataset, val: Dataset, test: Dataset, model: torch.nn.Module)->float:
     '''
     NDCG calculates overall how a query ranks all answers and normalizes

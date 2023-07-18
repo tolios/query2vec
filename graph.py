@@ -7,7 +7,7 @@ import json
 from tqdm import tqdm
 import torch
 from torch_geometric.data import  Data, Dataset
-from hash import hashQuery
+from form import hashQuery, structure
 
 def query2graph(query: list)->Data:
     #*  Receives a query in form of list of triples and 
@@ -98,10 +98,6 @@ class connections():
 
     version: 1.1: added inverses | r, r/-1 !!!
 
-    #! Needs better sampler?
-    #! having the same entity, different relation!? A relativeOf B, A neighbourOf B (makes sense?!)
-    ([[3366, 325, '_1'], [3366, 77, '_1']], 3365)
-    ([[400, 9, '_1'], [118, 9, '_1']], 9678)
     '''
     def __init__(self, path: str, 
                 entity2id: dict = dict(), 
@@ -239,7 +235,9 @@ class connections():
         #* It must be a tail of a known link!
         return random.choice(list(self._2relationships))
 
-    def sample_qa(self, num_edges: int = 2, other: connections|None = None, uniques: set = set())->tuple:
+    def sample_qa(self, 
+        num_edges: int = 2, other: connections|None = None, 
+        uniques: set = set(), structures = ["2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"])->tuple:
         #*  Samples a query (as a dag) and answer, with number of edges as num_edges.
         #* Sometimes, it fails and produces a rejected query, so it outputs ([], answer).
 
@@ -305,6 +303,12 @@ class connections():
             t = variables[t] if t in variables else t
             true_query.append([h, r, t])
 
+        # find structure
+        q_struct = structure(true_query)
+
+        if not (q_struct in structures):
+            return [], answer, uniques
+
         # find if unique qa
         qa_hash = hash((hashQuery(true_query), answer))
 
@@ -323,7 +327,8 @@ class connections():
                 yield ([[h, key[0], '_1']], key[1])
 
     def write_qas(self, qa_path:str, other: connections|None = None,
-            query_orders: list = list(), tot_tries = 10e7)->None:
+            query_orders: list = list(),
+            structures = ["2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"], tot_tries = 10e7)->None:
             #*  This is the main method of the class. 
             #* It writes all the contents in a specified file
             #* First we combine with other, if it exist, then 
@@ -335,17 +340,18 @@ class connections():
                 self.combine(other)
 
             with open(qa_path, 'w') as f:
-                #1st the 1hops ...
-                if other:
-                    #If specified, we should use the others
-                    #1 hops....(which contain the needed links!)
-                    #Used to generate val, test data...
-                    for qa in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
-                        f.write(str(qa)+'\n')
-                else:
-                    #Used to generate train data...
-                    for qa in self.generate_1hops():
-                        f.write(str(qa)+'\n')
+                #1st the 1hops ... if requested!
+                if '1p' in structures:
+                    if other:
+                        #If specified, we should use the others
+                        #1 hops....(which contain the needed links!)
+                        #Used to generate val, test data...
+                        for qa in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
+                            f.write(str(qa)+'\n')
+                    else:
+                        #Used to generate train data...
+                        for qa in self.generate_1hops():
+                            f.write(str(qa)+'\n')
                 #now we should use the sampling method for the rest...
                 for num_edges, num_queries in query_orders:
                     uniques = set()
@@ -353,7 +359,8 @@ class connections():
                     pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                     while len(uniques) < num_queries and tries < tot_tries:
                         #generate query...
-                        q, a, uniques = self.sample_qa(num_edges=num_edges, other=other, uniques=uniques)
+                        q, a, uniques = self.sample_qa(num_edges=num_edges, 
+                                            other=other, uniques=uniques, structures=structures)
                         #write (q, a) if q non empty
                         if q:
                             f.write(str((q, a))+'\n')
@@ -406,6 +413,18 @@ if __name__ == "__main__":
     parser.add_argument("--add_inverse",
                         type = bool, default=False,
                 help='''Add inverses for all relations in the KG, doubling all relations represented!''')
+    parser.add_argument("--include_train",
+                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                help='''
+                    This argument decides which of the query structures will be included in train''')
+    parser.add_argument("--include_val",
+                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                help='''
+                    This argument decides which of the query structures will be included in val''')
+    parser.add_argument("--include_test",
+                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                help='''
+                    This argument decides which of the query structures will be included in test''')
 
     args = parser.parse_args()
 
@@ -433,11 +452,15 @@ if __name__ == "__main__":
     train_query_orders = ast.literal_eval(args.train_query_orders)
     val_query_orders = ast.literal_eval(args.val_query_orders)
     test_query_orders = ast.literal_eval(args.test_query_orders)
+    # query structures
+    include_train = ast.literal_eval(args.include_train)
+    include_val = ast.literal_eval(args.include_train)
+    include_test = ast.literal_eval(args.include_test)
 
     #Making query files...
-    train.write_qas(qa_dir+'/train_qa.txt', query_orders=train_query_orders)
-    train.write_qas(qa_dir+'/val_qa.txt', other = val, query_orders=val_query_orders) #combines with val and keeps one edge (atleast) 
-    train.write_qas(qa_dir+'/test_qa.txt', other = test, query_orders=test_query_orders) #combines with test and keeps one edge (atleast)
+    train.write_qas(qa_dir+'/train_qa.txt', query_orders=train_query_orders, structures=include_train)
+    train.write_qas(qa_dir+'/val_qa.txt', other = val, query_orders=val_query_orders, structures=include_val) #combines with val and keeps one edge (atleast) 
+    train.write_qas(qa_dir+'/test_qa.txt', other = test, query_orders=test_query_orders, structures=include_test) #combines with test and keeps one edge (atleast)
 
     #Making an info json file...
     info = {
@@ -449,7 +472,10 @@ if __name__ == "__main__":
         'train_query_orders': args.train_query_orders,
         'val_query_orders': args.val_query_orders,
         'test_query_orders': args.test_query_orders,
-        'add_inverse': args.add_inverse
+        'add_inverse': args.add_inverse,
+        'include_train': args.include_train,
+        'include_val': args.include_val,
+        'include_test': args.include_test
     }
 
     with open(qa_dir+'/info.json', 'w') as f:
