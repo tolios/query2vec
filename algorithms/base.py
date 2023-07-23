@@ -1,10 +1,51 @@
 from __future__ import annotations
 from torch_geometric.data import Batch
-from torch import Tensor, from_numpy, no_grad, mean, device
+from torch import Tensor, from_numpy, no_grad, mean, device, logical_not, argsort, relu, clone, stack
 from torch.nn.functional import normalize
-from torch.nn import Module, Embedding
+from torch.nn import Module, Embedding, ModuleList
 from numpy import ndarray
 from abc import ABC, abstractmethod
+
+def root_embs(x: Tensor, edge_index: Tensor, batch_id: Tensor)->Tensor:
+    '''
+        This function receives the embeddings, edge_indexes and batch_ids of
+        a given Batch graph, returns the root embeddings!
+
+        root is simply the node of the query graph that has no outward links
+        acting as the placeholder variable for the answers!
+    '''
+    heads, tails = edge_index[0], edge_index[1]
+    # if in tails but not in heads, it is root!
+    is_root = logical_not((tails.unsqueeze(1) == heads).any(1))
+    root_pos = tails[is_root]
+    root_batch_id = batch_id[root_pos]
+    # given the batch id sort root_pos according to it...
+    root_pos = root_pos[argsort(root_batch_id)]
+    #make unique pos to avoid registering the same root many times 2i, 3i, pi problem!
+    root_pos = root_pos.unique_consecutive()
+
+    return x[root_pos]
+
+class conv_pipe(Module):
+    '''
+        This module neatly packs all convolution layers in a place
+    and forwards all layer embeddings!
+    '''
+    def __init__(self, conv_layers: ModuleList):
+        super().__init__()
+        self.conv_layers = conv_layers
+
+    def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor)->Tensor:
+        emb_layers = []
+        for layer in self.conv_layers:
+            x = layer(x, edge_index=edge_index, edge_type=edge_attr.squeeze(1))
+            x = relu(x)
+            # we have to clone to keep the diff structure for backprop
+            emb_layers.append(clone(x))
+        #! DYNAMIC EMBEDDING
+        #! NEEDS layers to have same emb dim!
+        # simply acting with [-1] we get the last x
+        return stack(emb_layers)
 
 class graph_embedding(Module):
     def __init__(self, num_entities, emb_dim):
@@ -16,7 +57,10 @@ class graph_embedding(Module):
         x = self.entity_emb(g_batch.x).squeeze(-2)
         #construct data object...
         return Batch(x=x, edge_index=g_batch.edge_index,
-                edge_attr=g_batch.edge_attr, batch=g_batch.batch, ptr=g_batch.ptr) 
+                edge_attr=g_batch.edge_attr, 
+                batch=g_batch.batch,
+                depth=g_batch.depth, #include for dynamic emb
+                ptr=g_batch.ptr) 
     def embed_entities(self, batch):
         return self.entity_emb(batch)
     def normalize(self):
