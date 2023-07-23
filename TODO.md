@@ -4,7 +4,6 @@ This file contains all needed milestones for completing the thesis project.
 
 ## Required code work
 
-- choose how many of one structure to generate, specify test structure filter
 - fix ndcg
 - construct box rgcn (rgat)
 - perhaps link convs with depth of query (?) 1p one conv, 2p two conv, 2i one conv
@@ -19,6 +18,5 @@ This file contains all needed milestones for completing the thesis project.
 
 ## Extra (not pressingly important)
 
-- construct 1p, 2p, 2i notation so as to check different structures?
 - better sampling technique?
 - test 1p, 2p, ... (like the papers)

@@ -7,7 +7,7 @@ import json
 from tqdm import tqdm
 import torch
 from torch_geometric.data import  Data, Dataset
-from form import hashQuery, structure
+from form import hashQuery, structure, DEPTH_DICT
 
 def query2graph(query: list)->Data:
     #*  Receives a query in form of list of triples and 
@@ -60,10 +60,21 @@ def query2graph(query: list)->Data:
     edge_attr = torch.LongTensor(edge_attr).unsqueeze(-1)
 
     #* Return Data...
-    #with hash
+    # with hash
     q_hash = hashQuery(query)
+    # structure
+    q_struct = structure(query)
+    # depth
+    q_depth = DEPTH_DICT[q_struct]
 
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, hash=q_hash)
+    return Data(
+        x=x, 
+        edge_index=edge_index, 
+        edge_attr=edge_attr, 
+        hash=q_hash, 
+        structure=q_struct, 
+        depth=q_depth
+    )
 
 class qa_dataset(Dataset):
     '''
@@ -271,7 +282,7 @@ class connections():
                 if order_h <= order_t:
                     #cycle, therefore reject...
                     return [], answer, uniques
-            #Name new variable for each new entity as tail!
+            #name new variable for each new entity as tail!
             if t not in variables:
                 vars += 1
                 variables[t] = f'_{vars}'
@@ -326,50 +337,68 @@ class connections():
             for h in self._2heads[key]:
                 yield ([[h, key[0], '_1']], key[1])
 
-    def write_qas(self, qa_path:str, other: connections|None = None,
-            query_orders: list = list(),
-            structures = ["2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"], tot_tries = 10e7)->None:
+    def write_qas(self, qa_name, other: connections|None = None,
+            query_orders: list = [[(2, 6000)]],
+            structures = [["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]], 
+            tot_tries = 10e7)->None:
             #*  This is the main method of the class. 
             #* It writes all the contents in a specified file
             #* First we combine with other, if it exist, then 
             #* we produce queries and answers!
 
-            _, name = os.path.split(qa_path)
+            if len(query_orders) != len(structures):
+                print('query orders and structures should be lists of same length')
+                raise
 
             if other:
                 self.combine(other)
 
-            with open(qa_path, 'w') as f:
-                #1st the 1hops ... if requested!
-                if '1p' in structures:
-                    if other:
-                        #If specified, we should use the others
-                        #1 hops....(which contain the needed links!)
-                        #Used to generate val, test data...
-                        for qa in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
-                            f.write(str(qa)+'\n')
-                    else:
-                        #Used to generate train data...
-                        for qa in self.generate_1hops():
-                            f.write(str(qa)+'\n')
-                #now we should use the sampling method for the rest...
-                for num_edges, num_queries in query_orders:
-                    uniques = set()
-                    tries = 1 #used for a cuttoff if the program takes too long?!
-                    pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
-                    while len(uniques) < num_queries and tries < tot_tries:
-                        #generate query...
-                        q, a, uniques = self.sample_qa(num_edges=num_edges, 
-                                            other=other, uniques=uniques, structures=structures)
-                        #write (q, a) if q non empty
-                        if q:
-                            f.write(str((q, a))+'\n')
-                            pbar.update(1)
+            n = 0
+
+            for query_orders_, structures_ in zip(query_orders, structures):
+
+                n += 1
+
+                qa_path = qa_name+f"_{n}.txt"
+                _, name = os.path.split(qa_path)
+
+                print(f"Making of {name}...")
+
+                with open(qa_path, 'w') as f:
+                    # query_orders, structures must be the same length...
+                    
+                    #1st the 1hops ... if requested!
+                    if '1p' in structures_:
+                        if other:
+                            #If specified, we should use the others
+                            #1 hops....(which contain the needed links!)
+                            #Used to generate val, test data...
+                            for qa in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
+                                f.write(str(qa)+'\n')
                         else:
-                            tries += 1
-                    pbar.close()
-                    if tries > tot_tries:
-                        print(f'Exceeted tot_tries = {tot_tries}')
+                            #Used to generate train data...
+                            for qa in tqdm(self.generate_1hops(), desc=f'Generating 1hops inside {name}'):
+                                f.write(str(qa)+'\n')
+                    #now we should use the sampling method for the rest...
+                    for num_edges, num_queries in query_orders_:
+                        uniques = set()
+                        tries = 1 #used for a cuttoff if the program takes too long?!
+                        pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
+                        while len(uniques) < num_queries and tries < tot_tries:
+                            #generate query...
+                            q, a, uniques = self.sample_qa(num_edges=num_edges, 
+                                                other=other, uniques=uniques, structures=structures_)
+                            #write (q, a) if q non empty
+                            if q:
+                                f.write(str((q, a))+'\n')
+                                pbar.update(1)
+                            else:
+                                tries += 1
+                        pbar.close()
+                        if tries > tot_tries:
+                            print(f'Exceeted tot_tries = {tot_tries}')
+                
+                print(f"Finished {name} !")
 
 def corrupted_answer(num_entities, batch_size, num_negs=1,start = 1):
     return torch.randint(high=num_entities, size=(batch_size[0], num_negs))+start
@@ -396,17 +425,17 @@ if __name__ == "__main__":
                         type = int, default=1, help="Determines the starting id of entities!")
 
     parser.add_argument("--train_query_orders",
-                        type = str, default='[(2, 60000)]',
+                        type = str, default='[[(2, 60000)]]',
                 help='''
                     Besides 1hop queries this argument can determine how many qa pairs that have DAGs with a specified num_edges. 
                     Expects a string of the form "[(num_edges, num_queries), ...]. num_edges: int >= 2"''')
     parser.add_argument("--val_query_orders",
-                        type = str, default='[(2, 60000)]',
+                        type = str, default='[[(2, 60000)]]',
                 help='''
                     Besides 1hop queries this argument can determine how many qa pairs that have DAGs with a specified num_edges. 
                     Expects a string of the form "[(num_edges, num_queries), ...]. num_edges: int >= 2"''')
     parser.add_argument("--test_query_orders",
-                        type = str, default='[(2, 60000)]',
+                        type = str, default='[[(2, 60000)]]',
                 help='''
                     Besides 1hop queries this argument can determine how many qa pairs that have DAGs with a specified num_edges. 
                     Expects a string of the form "[(num_edges, num_queries), ...]. num_edges: int >= 2"''')
@@ -414,15 +443,15 @@ if __name__ == "__main__":
                         type = bool, default=False,
                 help='''Add inverses for all relations in the KG, doubling all relations represented!''')
     parser.add_argument("--include_train",
-                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                    type = str, default='[["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]]',
                 help='''
                     This argument decides which of the query structures will be included in train''')
     parser.add_argument("--include_val",
-                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                    type = str, default='[["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]]',
                 help='''
                     This argument decides which of the query structures will be included in val''')
     parser.add_argument("--include_test",
-                    type = str, default='["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]',
+                    type = str, default='[["1p", "2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"]]',
                 help='''
                     This argument decides which of the query structures will be included in test''')
 
@@ -458,9 +487,9 @@ if __name__ == "__main__":
     include_test = ast.literal_eval(args.include_test)
 
     #Making query files...
-    train.write_qas(qa_dir+'/train_qa.txt', query_orders=train_query_orders, structures=include_train)
-    train.write_qas(qa_dir+'/val_qa.txt', other = val, query_orders=val_query_orders, structures=include_val) #combines with val and keeps one edge (atleast) 
-    train.write_qas(qa_dir+'/test_qa.txt', other = test, query_orders=test_query_orders, structures=include_test) #combines with test and keeps one edge (atleast)
+    train.write_qas(qa_dir+'/train_qa', query_orders=train_query_orders, structures=include_train)
+    train.write_qas(qa_dir+'/val_qa', other = val, query_orders=val_query_orders, structures=include_val) #combines with val and keeps one edge (atleast) 
+    train.write_qas(qa_dir+'/test_qa', other = test, query_orders=test_query_orders, structures=include_test) #combines with test and keeps one edge (atleast)
 
     #Making an info json file...
     info = {
