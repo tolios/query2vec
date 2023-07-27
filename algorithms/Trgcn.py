@@ -30,7 +30,7 @@ class Model(qa_embedder):
                             for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
-        self.register_buffer('T', torch.tensor([1], dtype=torch.long)) #temperature!
+        self.register_buffer('T', torch.tensor([T], dtype=torch.long)) #temperature!
 
     def loss(self, golden_score, corrupted_score):
         return -torch.log(torch.sigmoid((golden_score - corrupted_score)/self.T))
