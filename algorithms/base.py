@@ -1,10 +1,33 @@
 from __future__ import annotations
 from torch_geometric.data import Batch
-from torch import Tensor, from_numpy, no_grad, mean, device, logical_not, argsort, relu, clone, stack
+from torch import Tensor, from_numpy, no_grad, mean, device, logical_not, argsort, relu, clone, stack, min, max, cat
 from torch.nn.functional import normalize
 from torch.nn import Module, Embedding, ModuleList
 from numpy import ndarray
 from abc import ABC, abstractmethod
+
+def dist_box(b: Tensor, x: Tensor, alpha: Tensor, box_sep: int)->Tensor:
+    #* b is the box embedding, x is the point, alpha is a parameter
+    if len(b.shape) == 2:
+        centre, off = b[:, :box_sep], b[:, box_sep:]
+    else:
+        centre, off = b[:,:, :box_sep], b[:,:, box_sep:] #used when we unsqueeze
+    q_max = centre + off
+    q_min = centre - off
+    # calculate dist_out, dist_in
+    dist_out = (relu(x - q_max) + relu(q_min - x)).norm(dim=-1, p=1)
+    dist_in = (centre - min(q_max, max(q_min, x))).norm(dim=-1, p=1)
+
+    return dist_out + (alpha*dist_in)
+
+def box_embs(x: Tensor, box_sep: int)->Tensor:
+    # box embeddings are a centre vector and and off POSITIVE vector!
+    # first seperate!
+    centre, off = x[:, :box_sep], x[:, box_sep:]
+    # make off positive (they act as margins)
+    off = relu(off)
+    # return back together
+    return cat((centre, off), 1)
 
 def root_embs(x: Tensor, edge_index: Tensor, batch_id: Tensor)->Tensor:
     '''

@@ -1,14 +1,127 @@
 name: graph_env
 channels:
-    - conda-forge
-    - defaults
+  - pytorch
+  - conda-forge
+  - defaults
 dependencies:
-- pytorch
-- pandas
-- torchinfo
-- pytables
-- matplotlib
-- tensorboard
-- numpy
-- dash
-- tqdm
+  - blas=2.114=openblas
+  - blas-devel=3.9.0=14_osxarm64_openblas
+  - brotli=1.0.7=hc377ac9_0
+  - bzip2=1.0.8=h620ffc9_4
+  - ca-certificates=2022.10.11=hca03da5_0
+  - certifi=2022.9.24=py39hca03da5_0
+  - cffi=1.15.1=py39h22df2f2_0
+  - cycler=0.11.0=pyhd3eb1b0_0
+  - expat=2.4.9=hc377ac9_0
+  - fftw=3.3.9=h1a28f6b_1
+  - fonttools=4.25.0=pyhd3eb1b0_0
+  - freetype=2.11.0=h1192e45_0
+  - future=0.18.2=py39hca03da5_1
+  - giflib=5.2.1=h1a28f6b_0
+  - joblib=1.1.0=pyhd3eb1b0_0
+  - jpeg=9e=h1a28f6b_0
+  - kiwisolver=1.4.2=py39hc377ac9_0
+  - lcms2=2.12=hba8e193_0
+  - libblas=3.9.0=14_osxarm64_openblas
+  - libcblas=3.9.0=14_osxarm64_openblas
+  - libcxx=12.0.0=hf6beb65_1
+  - libffi=3.4.2=hc377ac9_2
+  - libgfortran=5.0.0=11_2_0_he6877d6_26
+  - libgfortran5=11.2.0=he6877d6_26
+  - libiconv=1.16=h1a28f6b_2
+  - liblapack=3.9.0=14_osxarm64_openblas
+  - liblapacke=3.9.0=14_osxarm64_openblas
+  - libopenblas=0.3.20=openmp_h2209c59_0
+  - libpng=1.6.37=hb8d0fd4_0
+  - libtiff=4.2.0=h11e2f9f_0
+  - libwebp=1.2.2=h68602c7_0
+  - libwebp-base=1.2.2=h1a28f6b_0
+  - llvm-openmp=14.0.3=hd125106_0
+  - lz4-c=1.9.3=hc377ac9_0
+  - matplotlib=3.5.0=py39hca03da5_0
+  - matplotlib-base=3.5.0=py39h9197a36_0
+  - munkres=1.1.4=py_0
+  - ncurses=6.3=h1a28f6b_2
+  - ninja=1.10.2=hca03da5_5
+  - ninja-base=1.10.2=h525c30c_5
+  - numpy=1.21.1=py39h1a24bff_2
+  - openblas=0.3.20=openmp_h745f6c2_0
+  - openssl=1.1.1s=h1a28f6b_0
+  - packaging=21.3=pyhd3eb1b0_0
+  - pillow=9.2.0=py39h4d1bdd5_1
+  - pip=22.2.2=py39hca03da5_0
+  - pycparser=2.21=pyhd3eb1b0_0
+  - pyparsing=3.0.4=pyhd3eb1b0_0
+  - python=3.9.7=hc70090a_1
+  - python-dateutil=2.8.2=pyhd3eb1b0_0
+  - readline=8.1.2=h1a28f6b_1
+  - scikit-learn=1.1.1=py39hc377ac9_0
+  - scipy=1.7.3=py39haa152ba_2
+  - setuptools=65.5.0=py39hca03da5_0
+  - six=1.16.0=pyhd3eb1b0_1
+  - sqlite=3.38.3=h1058600_0
+  - threadpoolctl=2.2.0=pyh0d69192_0
+  - tk=8.6.11=hb8d0fd4_1
+  - torchvision=0.2.2=py_3
+  - tornado=6.2=py39h1a28f6b_0
+  - wheel=0.37.1=pyhd3eb1b0_0
+  - xz=5.2.5=h1a28f6b_1
+  - zlib=1.2.12=h5a0b063_2
+  - zstd=1.4.9=h8574219_1
+  - pip:
+      - absl-py==1.3.0
+      - alembic==1.10.4
+      - blinker==1.6.2
+      - cachetools==4.2.4
+      - charset-normalizer==2.1.1
+      - click==8.1.3
+      - cloudpickle==2.2.1
+      - databricks-cli==0.17.6
+      - docker==6.1.0
+      - entrypoints==0.4
+      - flask==2.3.2
+      - gitdb==4.0.10
+      - gitpython==3.1.31
+      - google-auth==1.35.0
+      - google-auth-oauthlib==0.4.6
+      - grpcio==1.50.0
+      - gunicorn==20.1.0
+      - idna==3.4
+      - importlib-metadata==5.0.0
+      - itsdangerous==2.1.2
+      - jinja2==3.1.2
+      - mako==1.2.4
+      - markdown==3.4.1
+      - markupsafe==2.1.1
+      - mlflow==2.3.1
+      - oauthlib==3.2.2
+      - pandas==2.0.1
+      - protobuf==3.20.0
+      - pyarrow==11.0.0
+      - pyasn1==0.4.8
+      - pyasn1-modules==0.2.8
+      - pyjwt==2.6.0
+      - pytz==2023.3
+      - pyyaml==6.0
+      - querystring-parser==1.2.4
+      - requests==2.28.1
+      - requests-oauthlib==1.3.1
+      - rsa==4.9
+      - smmap==5.0.0
+      - sqlalchemy==2.0.12
+      - sqlparse==0.4.4
+      - tabulate==0.9.0
+      - tensorboard==2.4.0
+      - tensorboard-plugin-wit==1.8.1
+      - torch==1.11.0
+      - torch-geometric==2.1.0.post1
+      - torch-scatter==2.0.9
+      - torch-sparse==0.6.15
+      - tqdm==4.64.1
+      - typing-extensions==4.5.0
+      - tzdata==2023.3
+      - urllib3==1.26.12
+      - websocket-client==1.5.1
+      - werkzeug==2.3.3
+      - zipp==3.10.0
+prefix: /Users/apostolos/miniforge3/envs/graph_env
