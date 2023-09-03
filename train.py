@@ -88,7 +88,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), start = 1)
+            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
