@@ -92,6 +92,7 @@ for i, test_file in enumerate(test_data):
         if i == 0:
             print("creating filter...")
             filter = Filter(train, val, test, num_entities, big = args.big)
+            del train, val #not needed anymore!
             print("filter made successfully!")
         else:
             # update to new test
