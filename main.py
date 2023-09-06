@@ -103,7 +103,7 @@ else:
     optimizer_dict = {}
 
 #training begins...
-with start_run(run_name=config["run"], experiment_id=config["experiment_id"]):
+with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as run:
     set_tag("algorithm", algorithm)
     log_params(model_args)
     log_params(config["config"])
@@ -136,3 +136,8 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]):
     log_state_dict(
         optimizer.state_dict(), "optimizer"
     )
+
+    #in the end write to a run.json file with the run id!
+    run_id = run.info.run_id
+    with open("./run.json", "w") as f:
+        json.dump({"run_id": run_id, "dataset":  os.path.dirname(TRAIN_PATH)}, f)
