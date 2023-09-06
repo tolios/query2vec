@@ -50,18 +50,32 @@ for i, dir in enumerate(dir_list):
 
         print("**************************************************************************************************************")
 
-        for test in range(1, 8):
-            print(f"Staring test {test}/7 ...")
+        string_list = []
+        # for test in range(1, 8): #! use 8
+        #     string_list.append(f"{dataset}/test_qa_{test}.txt")
+        string_list.append(f"{dataset}/test_qa_{2}.txt")
+        string_list.append(f"{dataset}/test_qa_{1}.txt")
+
+        command = ["python", f"./query2vec/test.py",
+            id, f"tests.yml", "--N=3", "--filtering=true",
+            "--tests="+f"{string_list}",
+            f"--train_data={dataset}/train_qa_1.txt", 
+            f"--val_data={dataset}/val_qa_1.txt"]
         
-            command = ["python", f"./query2vec/test.py",
-                id, f"test_{test}.yml", "hits@", "--N=3", "--filtering=true",
-                f"--test_data={dataset}/test_qa_{test}.txt",
-                f"--train_data={dataset}/train_qa_1.txt", 
-                f"--val_data={dataset}/val_qa_1.txt"]
-            
-            exit_code = subprocess.call(command)
-            print("finished!")
-            print("**************************************************************************************************************")
+        exit_code = subprocess.call(command)
+        #! delete
+        string_list.append(f"{dataset}/test_qa_{1}.txt")
+        string_list.append(f"{dataset}/test_qa_{2}.txt")
+
+        command = ["python", f"./query2vec/test.py",
+            id, f"testsE.yml", "--N=3", "--filtering=true",
+            "--tests="+f"{string_list}",
+            f"--train_data={dataset}/train_qa_1.txt", 
+            f"--val_data={dataset}/val_qa_1.txt"]
+        
+        exit_code = subprocess.call(command)
+        print("finished!")
+        print("**************************************************************************************************************")
 
     #TODO add tests to all test data files... reproducing experiments
     print("--------------------------------------------------------------------------------------------------------------")

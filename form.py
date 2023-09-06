@@ -29,6 +29,8 @@ def parse_graphs(graph:list[tuple])->dict[str, set]:
         paths[t].add((h, r))
     return paths
 
+#! PERHAPS USE HASH THAT PRODUCES STRING, THEN ANCHORS PRODUCE STRING OF THEIR NUMBER
+
 def hash_variable(paths: dict[str, set], tail: str):
     ''' 
         Given a tail, it finds all heads connected with it,

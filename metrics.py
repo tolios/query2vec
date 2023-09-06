@@ -10,23 +10,16 @@ class Filter:
     def __init__(self, train: Dataset, val: Dataset, test: Dataset, 
             n_entities: int, big: int = 10e5):
         self.n_entities = n_entities
-        self.a_dict = self._create_dict(train, val, test) #answer dict
+        self.stable_dict = self._create_stable_dict(train, val)
+        self.test_dict = self._create_test_dict(test)
         self.big = big
 
-    def _create_dict(self, train: Dataset, val: Dataset, test: Dataset)->dict:
+    def _create_stable_dict(self, train: Dataset, val: Dataset)->dict:
         #this function creates a dictionary which uses the query hash
-        #and contains the set of corresponding answers that exist for train, val, test!
+        #and contains the set of corresponding answers that exist for train, val
         dict_ = dict()
         train = DataLoader(train, batch_size=1)
         for q, a in train:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
-        test = DataLoader(test, batch_size=1)
-        for q, a in test:
             q = q.hash.item()
             a = a.item()
             if q not in dict_:
@@ -42,6 +35,21 @@ class Filter:
             else:
                 dict_[q].add(a)
         return dict_
+
+    def _create_test_dict(self, test: Dataset)->dict:
+        #this function creates a dictionary for test only
+        # seperable so it cna be changed!
+        dict_ = dict()
+        test = DataLoader(test, batch_size=1)
+        for q, a in test:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        return dict_
+
     
     def mask(self, q: Batch, a: torch.Tensor)->torch.Tensor:
         '''
@@ -58,7 +66,8 @@ class Filter:
         batch_mask = []
         for q_hash, a_ in zip(q_hashes, a):
             #extract all answers
-            as_ = self.a_dict[q_hash]
+            as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
+            as_ = as_.union(self.test_dict.get(q_hash, set()))
             #remove given entity
             as_ = as_ - {a_}
             #mask creation!
@@ -74,6 +83,11 @@ class Filter:
             batch_mask.append(mask)
         # stack for batching...
         return torch.stack(batch_mask, dim=0)
+    
+    def change_test(self, test: Dataset):
+        # this method is used when consecutive test runs happen!
+        #changes test dict!
+        self.test_dict = self._create_test_dict(test)
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
@@ -95,6 +109,7 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Fi
             #applying filter if given
             if filter:
                 mask = filter.mask(q, a)
+                mask = mask.to(device)
                 scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for sorting...
@@ -127,6 +142,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
             #applying filter if given
             if filter:
                 mask = filter.mask(q, a)
+                mask = mask.to(device)
                 scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for topk...
@@ -156,6 +172,7 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
             #applying filter if given
             if filter:
                 mask = filter.mask(q, a)
+                mask = mask.to(device)
                 scores = scores + mask
             a = a.view(-1, 1)
             #calculating indices for sorting...
