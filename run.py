@@ -51,24 +51,11 @@ for i, dir in enumerate(dir_list):
         print("**************************************************************************************************************")
 
         string_list = []
-        # for test in range(1, 8): #! use 8
-        #     string_list.append(f"{dataset}/test_qa_{test}.txt")
-        string_list.append(f"{dataset}/test_qa_{2}.txt")
-        string_list.append(f"{dataset}/test_qa_{1}.txt")
+        for test in range(1, 8): #! use 8 for 1 .. 7
+            string_list.append(f"{dataset}/test_qa_{test}.txt")
 
         command = ["python", f"./query2vec/test.py",
             id, f"tests.yml", "--N=3", "--filtering=true",
-            "--tests="+f"{string_list}",
-            f"--train_data={dataset}/train_qa_1.txt", 
-            f"--val_data={dataset}/val_qa_1.txt"]
-        
-        exit_code = subprocess.call(command)
-        #! delete
-        string_list.append(f"{dataset}/test_qa_{1}.txt")
-        string_list.append(f"{dataset}/test_qa_{2}.txt")
-
-        command = ["python", f"./query2vec/test.py",
-            id, f"testsE.yml", "--N=3", "--filtering=true",
             "--tests="+f"{string_list}",
             f"--train_data={dataset}/train_qa_1.txt", 
             f"--val_data={dataset}/val_qa_1.txt"]
