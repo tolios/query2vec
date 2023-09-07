@@ -42,6 +42,9 @@ parser.add_argument("--batch_size",
 parser.add_argument("--seed",
                     default=42,
                     type=int, help="Seed for randomness")
+parser.add_argument("--filter_path",
+                    default="",
+                    type=str, help="Precomputed filter path. File is pickled...")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -67,9 +70,10 @@ if filtering:
     if not (args.train_data and args.val_data):
         print("train data and val data REQUIRED when filtering!!!")
         raise 
-
-    train = qa_dataset(args.train_data)
-    val = qa_dataset(args.val_data)
+    
+    if args.filter_path:
+        train = qa_dataset(args.train_data)
+        val = qa_dataset(args.val_data)
 
     #directory where qas are stored...
     id_dir=os.path.dirname(args.train_data)
@@ -90,10 +94,15 @@ for i, test_file in enumerate(test_data):
     test = qa_dataset(test_file) #get test data
     if filtering:
         if i == 0:
-            print("creating filter...")
-            filter = Filter(train, val, test, num_entities, big = args.big)
-            del train, val #not needed anymore!
-            print("filter made successfully!")
+            if args.filter_path:
+                print("Loading filter")
+                filter = Filter(None, None, test, num_entities, big=args.big, load_path=args.filter_path)
+                print("filter loaded!")
+            else:
+                print("creating filter...")
+                filter = Filter(train, val, test, num_entities, big = args.big)
+                del train, val #not needed anymore!
+                print("filter made successfully!")
         else:
             # update to new test
             print("updating filter...")

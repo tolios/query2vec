@@ -2,55 +2,26 @@ import torch
 from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
+import pickle
 
 class Filter:
     '''
     This class receives train, val and test qa data so as to create a filter function!
     '''
-    def __init__(self, train: Dataset, val: Dataset, test: Dataset, 
-            n_entities: int, big: int = 10e5):
-        self.n_entities = n_entities
-        self.stable_dict = self._create_stable_dict(train, val)
-        self.test_dict = self._create_test_dict(test)
-        self.big = big
+    def __init__(self, train, val, test, 
+            n_entities: int, big: int = 10e5, load_path = False):
+        if not load_path:
+            self.n_entities = n_entities
+            self.stable_dict = self._create_stable_dict(train, val)
+            self.test_dict = self._create_test_dict(test)
+            self.big = big
+        else:
+            # train, val should be None
+            self.n_entities = n_entities
+            self.big = big
+            self.stable_dict = self.load_stable()
+            self.test_dict = self._create_test_dict(test)
 
-    def _create_stable_dict(self, train: Dataset, val: Dataset)->dict:
-        #this function creates a dictionary which uses the query hash
-        #and contains the set of corresponding answers that exist for train, val
-        dict_ = dict()
-        train = DataLoader(train, batch_size=1)
-        for q, a in train:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
-        val = DataLoader(val, batch_size=1)
-        for q, a in val:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
-        return dict_
-
-    def _create_test_dict(self, test: Dataset)->dict:
-        #this function creates a dictionary for test only
-        # seperable so it cna be changed!
-        dict_ = dict()
-        test = DataLoader(test, batch_size=1)
-        for q, a in test:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
-        return dict_
-
-    
     def mask(self, q: Batch, a: torch.Tensor)->torch.Tensor:
         '''
         Using the hashes of queries we will create a mask.
@@ -88,6 +59,49 @@ class Filter:
         # this method is used when consecutive test runs happen!
         #changes test dict!
         self.test_dict = self._create_test_dict(test)
+
+    @classmethod
+    def load_stable(path):
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    @staticmethod
+    def _create_stable_dict(train: Dataset, val: Dataset)->dict:
+        #this function creates a dictionary which uses the query hash
+        #and contains the set of corresponding answers that exist for train, val
+        dict_ = dict()
+        train = DataLoader(train, batch_size=1)
+        for q, a in train:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        val = DataLoader(val, batch_size=1)
+        for q, a in val:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        return dict_
+
+    @staticmethod
+    def _create_test_dict(test: Dataset)->dict:
+        #this function creates a dictionary for test only
+        # seperable so it cna be changed!
+        dict_ = dict()
+        test = DataLoader(test, batch_size=1)
+        for q, a in test:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        return dict_
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
