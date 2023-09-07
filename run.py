@@ -58,7 +58,8 @@ for i, dir in enumerate(dir_list):
             id, f"tests.yml", "--N=3", "--filtering=true",
             "--tests="+f"{string_list}",
             f"--train_data={dataset}/train_qa_1.txt", 
-            f"--val_data={dataset}/val_qa_1.txt"]
+            f"--val_data={dataset}/val_qa_1.txt",
+            f"--filter_path=precomputed.pkl"]
         
         exit_code = subprocess.call(command)
         print("finished!")
