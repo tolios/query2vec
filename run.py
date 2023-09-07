@@ -9,6 +9,10 @@ if sys.argv[1] == "-f" or sys.argv[1] == "--folder":
     # Extract the absolute path
     run_folder = os.path.abspath(run_folder)
     dir_list = os.listdir(run_folder)
+    if len(sys.argv) > 3:
+        extra = sys.argv[3:]
+    else:
+        extra = []
 else:
     # since no -f flag (folder), then
     # Get the full path to the script being executed
@@ -16,6 +20,10 @@ else:
     # Extract the directory path from the script path
     run_folder = os.path.abspath(os.path.join(os.path.abspath(run_path), os.pardir))
     dir_list = [os.path.basename(os.path.abspath(run_path))]
+    if len(sys.argv) > 2:
+        extra = sys.argv[2:]
+    else:
+        extra = []
 
 print(f"Starting execution of {len(dir_list)} run(s) ...")
 print("--------------------------------------------------------------------------------------------------------------")
@@ -58,8 +66,7 @@ for i, dir in enumerate(dir_list):
             id, f"tests.yml", "--N=3", "--filtering=true",
             "--tests="+f"{string_list}",
             f"--train_data={dataset}/train_qa_1.txt", 
-            f"--val_data={dataset}/val_qa_1.txt",
-            f"--filter_path=precomputed.pkl"]
+            f"--val_data={dataset}/val_qa_1.txt"] + extra
         
         exit_code = subprocess.call(command)
         print("finished!")
