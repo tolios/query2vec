@@ -9,6 +9,8 @@ from mlflow import set_tracking_uri, log_dict, start_run
 from mlflow.pytorch import load_model
 import ast
 
+#! FILTER_PATH WORKS FOR UNIQUE DATASET...
+
 #parser for all arguments!
 parser = argparse.ArgumentParser(description='Testing query embeddings...')
 
@@ -71,7 +73,7 @@ if filtering:
         print("train data and val data REQUIRED when filtering!!!")
         raise 
     
-    if args.filter_path:
+    if not args.filter_path:
         train = qa_dataset(args.train_data)
         val = qa_dataset(args.val_data)
 
