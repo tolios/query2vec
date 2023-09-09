@@ -19,7 +19,7 @@ class Filter:
             # train, val should be None
             self.n_entities = n_entities
             self.big = big
-            self.stable_dict = self.load_stable()
+            self.stable_dict = self.load_stable(load_path)
             self.test_dict = self._create_test_dict(test)
 
     def mask(self, q: Batch, a: torch.Tensor)->torch.Tensor:
@@ -61,7 +61,7 @@ class Filter:
         self.test_dict = self._create_test_dict(test)
 
     @classmethod
-    def load_stable(path):
+    def load_stable(cls, path):
         with open(path, "rb") as f:
             return pickle.load(f)
 
