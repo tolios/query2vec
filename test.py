@@ -47,6 +47,9 @@ parser.add_argument("--seed",
 parser.add_argument("--filter_path",
                     default="",
                     type=str, help="Precomputed filter path. File is pickled...")
+parser.add_argument("--all_tests",
+                    action=argparse.BooleanOptionalAction,
+                    help="Calculate also mean_rank and mrr tests!")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -112,21 +115,23 @@ for i, test_file in enumerate(test_data):
             print("done!")
 
     logs[test_file] = {}
-    result1 = mean_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
-    logs[test_file]["mean_rank"] = {
-        "result": result1,
-        "N": None,
-    }
+    if args.all_tests:
+        result1 = mean_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
+        logs[test_file]["mean_rank"] = {
+            "result": result1,
+            "N": None,
+        }
     result2 = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
     logs[test_file]["hits@"] = {
         "result": result2,
         "N": N,
     }
-    result3 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
-    logs[test_file]["mrr"] = {
-        "result": result3,
-        "N": None,
-    }
+    if args.all_tests:
+        result3 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
+        logs[test_file]["mrr"] = {
+            "result": result3,
+            "N": None,
+        }
     print(f"Finished {test_file}")
 
 logs["utils"] = {}
