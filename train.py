@@ -127,6 +127,14 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             "val score": running_val_score/j
         }, epoch)
 
+        # stop run if we have hit score 1. and above!
+        if ((running_score/i) >= 1.) or ((running_val_score/j) >= 1.):
+            # hit floor ...
+            print("Hit maximum score, ending training...")
+            epoch_stop = epoch 
+            # no need to load or save!
+            break
+
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
         if patience != -1:
             if highest_val_score <= running_val_score/j:

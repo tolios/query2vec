@@ -31,9 +31,11 @@ class Model(qa_embedder):
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
         self.register_buffer('T', torch.tensor([T], dtype=torch.float)) #temperature!
+        self.register_buffer('margin', torch.tensor([margin], dtype=torch.float))
 
+    #! EDIT LATEX
     def loss(self, golden_score, corrupted_score):
-        return -torch.log(torch.sigmoid((golden_score - corrupted_score)/self.T))
+        return -torch.log(torch.sigmoid((golden_score - corrupted_score - self.margin)/self.T))
 
     #! should not be here ?
     def _score(self, query_embs, answers):
