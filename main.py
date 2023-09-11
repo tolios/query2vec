@@ -15,8 +15,6 @@ from mlflow.pytorch import log_model, log_state_dict, load_model, load_state_dic
 from mlflow.models.signature import ModelSignature
 from mlflow.types.schema import Schema, TensorSpec
 
-#TODO USE COLAB GPU !!! QA FOLDER IS LIGHT!!!
-#TODO Implement nDCG metric
 #! UNDER DEVELOPMENT CHECK ALL
 
 warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)

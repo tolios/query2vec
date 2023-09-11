@@ -163,8 +163,47 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
             #summing hits... +1 very important for correct positioning!!!
             hits += torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum().item()
-        #return total hits over 2*n_queries!
+        #return total hits over n_queries!
         return hits/(n_queries)
+
+def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+    model.eval() #set for eval
+    with torch.no_grad():
+        plus = torch.tensor([1], dtype=torch.long, device=device)
+        loader = DataLoader(data, batch_size = batch_size)
+        #useful tensors...
+        zero_tensor, one_tensor = torch.tensor([0]), torch.tensor([1])
+        zero_tensor, one_tensor = zero_tensor.to(device), one_tensor.to(device)
+        #creating a tensor for comparisons over all entities per batch...
+        comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
+        comp = comp.to(device)
+        collect = dict() # collects all hits per hash
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} grouped calculation'):
+            q, a = q.to(device), a.to(device)
+            #calculating head and tail energies for prediction
+            if a.shape[0] != batch_size:
+                #last batch...
+                comp = comp[:a.shape[0]]
+            #calculating scores...
+            scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                mask = mask.to(device)
+                scores = scores + mask
+            a = a.view(-1, 1)
+            #calculating indices for topk...
+            _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
+            #summing hits... +1 very important for correct positioning!!!
+            hits = torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum(-1) #add result will be either 1, or 0
+            for hit, hash in zip(hits, q.hash):
+                hash = hash.item()
+                if hash in collect:
+                    collect[hash].append(hit.item())
+                else:
+                    collect[hash] = [hit.item()]
+        #return total hits over n_queries!
+        return sum([sum(collect[hash])/len(collect[hash]) if len(collect[hash])!= 0 else 0 for hash in collect])/(len(collect))
 
 def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval

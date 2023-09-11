@@ -39,7 +39,7 @@ parser.add_argument("--big",
                     default='10e5',
                     type=float, help="Value of mask, so as to filter out golden triples")
 parser.add_argument("--batch_size",
-                    default=1000,
+                    default=64,
                     type=int, help="Test batch size")
 parser.add_argument("--seed",
                     default=42,
@@ -121,15 +121,22 @@ for i, test_file in enumerate(test_data):
             "result": result1,
             "N": None,
         }
+    #TODO - Determine how to implement testing...
     result2 = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
     logs[test_file]["hits@"] = {
         "result": result2,
         "N": N,
     }
     if args.all_tests:
-        result3 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
-        logs[test_file]["mrr"] = {
+        result3 = hits_at_N_Grouped(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
+        logs[test_file]["hitsGrouped@"] = {
             "result": result3,
+            "N": N,
+        }
+    if args.all_tests:
+        result4 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
+        logs[test_file]["mrr"] = {
+            "result": result4,
             "N": None,
         }
     print(f"Finished {test_file}")

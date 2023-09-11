@@ -41,7 +41,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
         running_corr_score = 0.0
         running_val_score = 0.0
         #calculate training losses...
-        for i, qa_batch in enumerate(train_loader):
+        for qa_batch in train_loader:
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
@@ -50,28 +50,28 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
             #getting losses...
-            running_loss += loss.mean().data.item()
-            running_score += score.mean().data.item()
-            running_corr_score += corr_score.mean().data.item()
+            running_loss += loss.sum().data.item()
+            running_score += score.sum().data.item()
+            running_corr_score += corr_score.sum().data.item()
         #calculate val loss...
-        for j, qa_batch in enumerate(val_loader):
+        for qa_batch in val_loader:
             #questions and answers!
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #calculate validation scores!!!
-            running_val_score += model.evaluate(batch, answers).mean().data.item()
+            running_val_score += model.evaluate(batch, answers).sum().data.item()
     #print results...
-    print('Epoch: ', epoch_stop, ', loss: ', "{:.4f}".format(running_loss/i),
-        ', score: ', "{:.4f}".format(running_score/i),
-        ', corrupted score: ', "{:.4f}".format(running_corr_score/i),
-        ', val_score: ', "{:.4f}".format(running_val_score/j),
+    print('Epoch: ', epoch_stop, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
+        ', score: ', "{:.4f}".format(running_score/(len(train))),
+        ', corrupted score: ', "{:.4f}".format(running_corr_score/(len(train))),
+        ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
         ', time: ', "starting...")
     #get metrics
     log_metrics({
-        "loss": running_loss/i,
-        "golden score": running_score/i,
-        "corrupted score": running_corr_score/i,
-        "val score": running_val_score/i
+        "loss": running_loss/(len(train)),
+        "golden score": running_score/(len(train)),
+        "corrupted score": running_corr_score/(len(train)),
+        "val score": running_val_score/(len(val))
         }, 0)
     #make temp dir
     os.makedirs("./temp")
@@ -84,7 +84,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
         running_corr_score = 0.0
         # #perform normalizations before entering the mini-batch.
         model.normalize()
-        for i, qa_batch in enumerate(train_loader):
+        for qa_batch in train_loader:
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
@@ -99,47 +99,39 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             #update parameters!
             optimizer.step()
             #getting losses...
-            running_loss += loss.mean().data.item()
-            running_score += score.mean().data.item()
-            running_corr_score += corr_score.mean().data.item()
+            running_loss += loss.sum().data.item()
+            running_score += score.sum().data.item()
+            running_corr_score += corr_score.sum().data.item()
         #calculating val energy....
         model.eval()
         with torch.no_grad():
             running_val_score = 0.0
-            for j, qa_batch in enumerate(val_loader):
+            for qa_batch in val_loader:
                 #questions and answers!
                 batch, answers = qa_batch
                 batch, answers = batch.to(device), answers.to(device)
                 #calculate validation scores!!!
-                running_val_score += model.evaluate(batch, answers).mean().data.item()
+                running_val_score += model.evaluate(batch, answers).sum().data.item()
         #print results...
-        print('Epoch: ', epoch, ', loss: ', "{:.4f}".format(running_loss/i),
-            ', score: ', "{:.4f}".format(running_score/i),
-            ', corrupted score: ', "{:.4f}".format(running_corr_score/i),
-            ', val_score: ', "{:.4f}".format(running_val_score/j),
+        print('Epoch: ', epoch, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
+            ', score: ', "{:.4f}".format(running_score/(len(train))),
+            ', corrupted score: ', "{:.4f}".format(running_corr_score/(len(train))),
+            ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
             ', time: ', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
         
         #collecting metrics...
         log_metrics({
-            "loss": running_loss/i,
-            "golden score": running_score/i,
-            "corrupted score": running_corr_score/i,
-            "val score": running_val_score/j
+            "loss": running_loss/(len(train)),
+            "golden score": running_score/(len(train)),
+            "corrupted score": running_corr_score/(len(train)),
+            "val score": running_val_score/(len(val))
         }, epoch)
-
-        # stop run if we have hit score 1. and above!
-        if ((running_score/i) >= 1.) or ((running_val_score/j) >= 1.):
-            # hit floor ...
-            print("Hit maximum score, ending training...")
-            epoch_stop = epoch 
-            # no need to load or save!
-            break
 
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
         if patience != -1:
-            if highest_val_score <= running_val_score/j:
+            if highest_val_score <= running_val_score/(len(val)):
                 #setting new score!
-                highest_val_score = running_val_score/j
+                highest_val_score = running_val_score/(len(val))
                 #save model checkpoint...
                 save_checkpoint(model, [model.num_entities, model.num_relationships], 
                     model.kwargs,'./temp')
