@@ -11,6 +11,9 @@ parser.add_argument("train",
                     type=str, help="Training path...")
 parser.add_argument("valid",
                     type=str, help="Validation path...")
+parser.add_argument("save_val",
+                    type=str,
+                    default="", help="If given, creates filter only with the training set")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -18,7 +21,13 @@ args = parser.parse_args()
 train = qa_dataset(args.train)
 val = qa_dataset(args.valid)
 
-print("Creating filter for train and val ...")
+if args.save_val:
+    print("Creating filter for val using training data!")
+    dict_ = Filter._create_train_dict(train)
+    with open(args.save_val, "wb") as f:
+        pickle.dump(dict_, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+print("Creating filter for test using train and val ...")
 dict_ = Filter._create_stable_dict(train, val)
 
 with open(args.save, "wb") as f:

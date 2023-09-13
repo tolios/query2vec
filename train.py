@@ -7,11 +7,13 @@ from torch.optim import Adagrad
 from graph import *
 from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
+from metrics import hits_at_N_Grouped, hits_at_N
 
 def training(model: torch.nn.Module, optimizer_dict:dict,
     train: Dataset, val: Dataset,
     epochs = 50, batch_size = 1024, val_batch_size = 1024, num_negs = 1,
-    lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, device=torch.device('cpu')):
+    lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, filter=None, 
+    device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
     Returns trained model, training losses, Uncorrupted and Corrupted energies.
@@ -29,7 +31,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
     t_start = time.time()
     #for early stopping!
     #start with huge number!
-    highest_val_score = -1e5
+    highest_val_hitsAt3 = 0.0
     stop_counter = 1
     epoch_stop = 0 #keeps track of last epoch of checkpoint...
     #get init scores!!!
@@ -60,18 +62,21 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             batch, answers = batch.to(device), answers.to(device)
             #calculate validation scores!!!
             running_val_score += model.evaluate(batch, answers).sum().data.item()
+        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True) #FIXME - turn to group
     #print results...
     print('Epoch: ', epoch_stop, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
         ', score: ', "{:.4f}".format(running_score/(len(train))),
-        ', corrupted score: ', "{:.4f}".format(running_corr_score/(len(train))),
+        ', corr_score: ', "{:.4f}".format(running_corr_score/(len(train))),
         ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
+        ', val hits@3:', "{:.2f}".format(hitsATN*100),
         ', time: ', "starting...")
     #get metrics
     log_metrics({
         "loss": running_loss/(len(train)),
         "golden score": running_score/(len(train)),
-        "corrupted score": running_corr_score/(len(train)),
-        "val score": running_val_score/(len(val))
+        "corr score": running_corr_score/(len(train)),
+        "val score": running_val_score/(len(val)),
+        "hitsAt3": hitsATN*100,
         }, 0)
     #make temp dir
     os.makedirs("./temp")
@@ -112,11 +117,13 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
                 batch, answers = batch.to(device), answers.to(device)
                 #calculate validation scores!!!
                 running_val_score += model.evaluate(batch, answers).sum().data.item()
+            hitsATN = hits_at_N_Grouped(val, model, N=3, filter=filter, device=device,disable=True)
         #print results...
         print('Epoch: ', epoch, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
             ', score: ', "{:.4f}".format(running_score/(len(train))),
             ', corrupted score: ', "{:.4f}".format(running_corr_score/(len(train))),
             ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
+            ', val hits@3:', "{:.2f}".format(hitsATN*100),
             ', time: ', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
         
         #collecting metrics...
@@ -124,14 +131,15 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             "loss": running_loss/(len(train)),
             "golden score": running_score/(len(train)),
             "corrupted score": running_corr_score/(len(train)),
-            "val score": running_val_score/(len(val))
+            "val score": running_val_score/(len(val)),
+            "hitsAt3": hitsATN*100,
         }, epoch)
 
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
         if patience != -1:
-            if highest_val_score <= running_val_score/(len(val)):
+            if highest_val_hitsAt3 <= hitsATN:
                 #setting new score!
-                highest_val_score = running_val_score/(len(val))
+                highest_val_hitsAt3 = hitsATN
                 #save model checkpoint...
                 save_checkpoint(model, [model.num_entities, model.num_relationships], 
                     model.kwargs,'./temp')

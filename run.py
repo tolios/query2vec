@@ -35,8 +35,13 @@ for i, dir in enumerate(dir_list):
     model_json = os.path.join(run_dir, "model.json")
     config_json = os.path.join(run_dir, "train_config.json")
 
+    if len(extra) >= 2:
+        extra_train = [extra.pop(0)]
+    else:
+        extra_train = []
+
     # Specify the command to execute the script
-    command = ["python", f"./query2vec/main.py", config_json, model_json]
+    command = ["python", f"./query2vec/main.py", config_json, model_json] + extra_train
 
     # Execute the script and capture its output in real-time
     # Wait for the script to finish

@@ -64,6 +64,21 @@ class Filter:
     def load_stable(cls, path):
         with open(path, "rb") as f:
             return pickle.load(f)
+        
+    @staticmethod
+    def _create_train_dict(train: Dataset)->dict:
+        #this function creates a dictionary which uses the query hash
+        #and contains the set of corresponding answers that exist for train, val
+        dict_ = dict()
+        train = DataLoader(train, batch_size=1)
+        for q, a in train:
+            q = q.hash.item()
+            a = a.item()
+            if q not in dict_:
+                dict_[q] = {a}
+            else:
+                dict_[q].add(a)
+        return dict_
 
     @staticmethod
     def _create_stable_dict(train: Dataset, val: Dataset)->dict:
@@ -132,7 +147,7 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Fi
             mean += torch.sum(1+torch.eq(_indices+plus,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
-def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -145,7 +160,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
         #creating a tensor for comparisons over all entities per batch...
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
-        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} calculation', disable=disable):
             q, a = q.to(device), a.to(device)
             #calculating head and tail energies for prediction
             if a.shape[0] != batch_size:
@@ -166,7 +181,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
         #return total hits over n_queries!
         return hits/(n_queries)
 
-def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -178,7 +193,7 @@ def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size 
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
         collect = dict() # collects all hits per hash
-        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} grouped calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} hits@{N} grouped calculation', disable=disable):
             q, a = q.to(device), a.to(device)
             #calculating head and tail energies for prediction
             if a.shape[0] != batch_size:

@@ -14,6 +14,7 @@ from mlflow import log_params, set_tag, start_run, set_tracking_uri, set_experim
 from mlflow.pytorch import log_model, log_state_dict, load_model, load_state_dict
 from mlflow.models.signature import ModelSignature
 from mlflow.types.schema import Schema, TensorSpec
+from metrics import Filter
 
 #! UNDER DEVELOPMENT CHECK ALL
 
@@ -31,6 +32,9 @@ parser.add_argument("json_config",
                     type=str, help="Training configuration json file...")
 parser.add_argument("json_model",
                     type=str, help="Model architecture json file...")
+parser.add_argument("--val_filter",
+                    type=str,
+                    default="", help="val filter path")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -100,15 +104,21 @@ else:
     model = module.Model(num_entities, num_relationships, **model_args)
     optimizer_dict = {}
 
+if args.val_filter:
+    filter = Filter(None, None, val_qa, model.num_entities, load_path=args.val_filter)
+else:
+    filter = None
+
 #training begins...
 with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as run:
     set_tag("algorithm", algorithm)
     log_params(model_args)
     log_params(config["config"])
+    log_param("val_filter", args.val_filter)
     model, final_epoch, optimizer = training(model, optimizer_dict, train_qa, val_qa,
                 device=DEVICE, epochs = EPOCHS,
                 batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,
-                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE)
+                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter)
     log_param("final_epoch", final_epoch)
     
     #! move somewhere relevant to the model?
