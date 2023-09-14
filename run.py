@@ -64,7 +64,7 @@ for i, dir in enumerate(dir_list):
         print("**************************************************************************************************************")
 
         string_list = []
-        for test in range(1, 8): #! use 8 for 1 .. 7
+        for test in range(1, 2): #NOTE - make the other tests for all the good models
             string_list.append(f"{dataset}/test_qa_{test}.txt")
 
         command = ["python", f"./query2vec/test.py",

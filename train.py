@@ -9,10 +9,11 @@ from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
 from metrics import hits_at_N_Grouped, hits_at_N
 
-def training(model: torch.nn.Module, optimizer_dict:dict,
+def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     train: Dataset, val: Dataset,
     epochs = 50, batch_size = 1024, val_batch_size = 1024, num_negs = 1,
     lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, filter=None, 
+    scheduler_patience=3, scheduler_factor=0.1, scheduler_threshold=0.1,
     device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
@@ -27,6 +28,11 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
     if pretrained:
         #load also optimizer state!
         optimizer.load_state_dict(optimizer_dict)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", 
+        patience=scheduler_patience, factor=scheduler_factor, threshold=scheduler_threshold, verbose=True)
+    if pretrained:
+        #load also optimizer state!
+        scheduler.load_state_dict(scheduler_dict)
     #training begins...
     t_start = time.time()
     #for early stopping!
@@ -62,7 +68,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
             batch, answers = batch.to(device), answers.to(device)
             #calculate validation scores!!!
             running_val_score += model.evaluate(batch, answers).sum().data.item()
-        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True) #FIXME - turn to group
+        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
     #print results...
     print('Epoch: ', epoch_stop, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
         ', score: ', "{:.4f}".format(running_score/(len(train))),
@@ -117,7 +123,11 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
                 batch, answers = batch.to(device), answers.to(device)
                 #calculate validation scores!!!
                 running_val_score += model.evaluate(batch, answers).sum().data.item()
-            hitsATN = hits_at_N_Grouped(val, model, N=3, filter=filter, device=device,disable=True)
+            hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+        
+        # will make lr smaller if hitsATN doesn't improve
+        scheduler.step(hitsATN*100)
+
         #print results...
         print('Epoch: ', epoch, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
             ', score: ', "{:.4f}".format(running_score/(len(train))),
@@ -130,19 +140,19 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
         log_metrics({
             "loss": running_loss/(len(train)),
             "golden score": running_score/(len(train)),
-            "corrupted score": running_corr_score/(len(train)),
+            "corr score": running_corr_score/(len(train)),
             "val score": running_val_score/(len(val)),
             "hitsAt3": hitsATN*100,
         }, epoch)
 
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
         if patience != -1:
-            if highest_val_hitsAt3 <= hitsATN:
+            if highest_val_hitsAt3 < hitsATN:
                 #setting new score!
                 highest_val_hitsAt3 = hitsATN
                 #save model checkpoint...
-                save_checkpoint(model, [model.num_entities, model.num_relationships], 
-                    model.kwargs,'./temp')
+                save_checkpoint(model, optimizer, scheduler,
+                    [model.num_entities, model.num_relationships], model.kwargs,'./temp')
                 epoch_stop = epoch
                 #"zero out" counter
                 stop_counter = 1
@@ -152,7 +162,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
                     print('Early stopping at epoch:', epoch)
                     print('Loading from epoch:', epoch_stop)
                     #load model from previous checkpoint!
-                    model = load_checkpoint('./temp', model.__class__, device)
+                    model, optimizer, scheduler = load_checkpoint('./temp', model.__class__, optimizer, scheduler, device)
                     break
                 else:
                     #be patient...
@@ -162,12 +172,14 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
                         print('Finished during early stopping...')
                         print('Loading from epoch:', epoch_stop)
                         #load model from previous checkpoint!
-                        model = load_checkpoint('./temp', model.__class__, device)
+                        model, optimizer, scheduler = load_checkpoint('./temp', model.__class__, optimizer, scheduler, device)
         else:
             epoch_stop = epochs
     ## If checkpoint exists, delete it ##
     if os.path.isfile("./temp/checkpoint.pt"):
         os.remove("./temp/checkpoint.pt")
+        os.remove("./temp/optimizer.pt")
+        os.remove("./temp/scheduler.pt")
         os.rmdir("./temp")
 
     print('Training ends ...')
@@ -176,4 +188,4 @@ def training(model: torch.nn.Module, optimizer_dict:dict,
     #putting model weights to cpu (only useful when we have gpu training...)
     model.to(torch.device('cpu'))
     #returning model as well as optimizer and actual last epoch (early stopping)...
-    return model, epoch_stop, optimizer
+    return model, epoch_stop, optimizer, scheduler

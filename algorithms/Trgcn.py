@@ -33,9 +33,9 @@ class Model(qa_embedder):
         self.register_buffer('T', torch.tensor([T], dtype=torch.float)) #temperature!
         self.register_buffer('margin', torch.tensor([margin], dtype=torch.float))
 
-    #FIXME - wont work for initialization bicause of small T
+    #NOTE - might work, check
     def loss(self, golden_score, corrupted_score):
-        return +torch.log(torch.exp(-(golden_score - corrupted_score - self.margin)/self.T) + 1)
+        return (-(golden_score - corrupted_score - self.margin)/self.T) + torch.log(torch.exp((golden_score - corrupted_score - self.margin)/self.T) + 1)
 
     #! should not be here ?
     def _score(self, query_embs, answers):

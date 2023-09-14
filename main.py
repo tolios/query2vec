@@ -69,6 +69,9 @@ LEARNING_RATE = config["config"].get("lr", 0.01)
 WEIGHT_DECAY = config["config"].get("wd", 0.001)
 PATIENCE = config["config"].get("patience", -1)
 NUM_NEGS = config["config"].get("num_negs", 1)
+scheduler_patience = config["config"].get("scheduler_patience", 3) 
+scheduler_factor = config["config"].get("scheduler_factor", 0.1)
+scheduler_threshold = config["config"].get("scheduler_threshold", 0.1)
 pretrained = config["config"].get("pretrained", False)
 
 #seeds
@@ -91,6 +94,7 @@ if pretrained:
     #pretrained should end in .../
     model = load_model(pretrained+"model")
     optimizer_dict = load_state_dict(pretrained+"optimizer")
+    scheduler_dict = load_state_dict(pretrained+"scheduler")
 
 else:
 
@@ -103,6 +107,7 @@ else:
 
     model = module.Model(num_entities, num_relationships, **model_args)
     optimizer_dict = {}
+    scheduler_dict = {}
 
 if args.val_filter:
     filter = Filter(None, None, val_qa, model.num_entities, load_path=args.val_filter)
@@ -115,10 +120,11 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as
     log_params(model_args)
     log_params(config["config"])
     log_param("val_filter", args.val_filter)
-    model, final_epoch, optimizer = training(model, optimizer_dict, train_qa, val_qa,
-                device=DEVICE, epochs = EPOCHS,
+    model, final_epoch, optimizer, scheduler = training(model, optimizer_dict, scheduler_dict, 
+                train_qa, val_qa, device=DEVICE, epochs = EPOCHS,
                 batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,
-                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter)
+                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter,
+                scheduler_patience = scheduler_patience, scheduler_factor = scheduler_factor, scheduler_threshold = scheduler_threshold)
     log_param("final_epoch", final_epoch)
     
     #! move somewhere relevant to the model?
@@ -143,6 +149,10 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as
     #logging optimizer!
     log_state_dict(
         optimizer.state_dict(), "optimizer"
+    )
+    #logging scheduler
+    log_state_dict(
+        scheduler.state_dict(), "scheduler"
     )
 
     #in the end write to a run.json file with the run id!
