@@ -31,7 +31,7 @@ class Model(qa_embedder):
         self.register_buffer('gamma', torch.tensor([gamma], dtype=torch.float))
         #* Purely for box embedding!
         self.box_sep = emb_dim # useful for seperation of Centre and Off of box emb.
-    
+    #FIXME - model doesn't work as nicely as hoped, needs fix
     def loss(self, golden_score, corrupted_score):
         return -(torch.log(0.5*(golden_score+1) + 0.01) + torch.log(1.01 - (0.5*(corrupted_score+1)))) # log of mean vs in paper mean of log
 

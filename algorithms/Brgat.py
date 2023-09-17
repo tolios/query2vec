@@ -1,16 +1,13 @@
 from __future__ import annotations
-from torch_geometric.nn.conv import FastRGCNConv
+from torch_geometric.nn.conv import RGATConv
 from torch_scatter import scatter_add
 import torch
 import torch.nn as nn
-from .base import qa_embedder
+from .base import qa_embedder, box_embs, dist_box
 
 class Model(qa_embedder): 
-
-    # Read InfoNCE paper: https://arxiv.org/pdf/1807.03748v2.pdf
-
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
-                emb_dim = 50, conv_dims=[100],linear_dims=[50], p=0.2, margin = 1.0, T = 0.01):
+                emb_dim = 50, conv_dims=[100],linear_dims=[50], alpha = 0.1, gamma = 0.1, p=0.2, margin = 1.0):
         super().__init__(num_entities, emb_dim)
         self.num_entities = num_entities
         self.num_relationships = num_relationships
@@ -22,25 +19,24 @@ class Model(qa_embedder):
             'linear_dims': linear_dims,
             'p': 0.2,
             'margin': margin,
-            'T': T
         }
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
-        self.conv_layers = nn.ModuleList([FastRGCNConv(l, r, num_relationships, 
+        self.conv_layers = nn.ModuleList([RGATConv(l, r, num_relationships, 
                         num_bases=num_bases, num_blocks=num_blocks, is_sorted=True) \
                             for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])])
-        self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[emb_dim])[1:])])
+        self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[2*emb_dim])[1:])]) # 2*emb because box embs!
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
-        self.register_buffer('T', torch.tensor([T], dtype=torch.float)) #temperature!
-        self.register_buffer('margin', torch.tensor([margin], dtype=torch.float))
-
-    #REVIEW - multiply all with self.T and change thesis definition
+        #used to implement loss! reduction = none, so it is used for outputing batch losses (later we sum them)
+        self.register_buffer('alpha', torch.tensor([alpha], dtype=torch.float))
+        self.register_buffer('gamma', torch.tensor([gamma], dtype=torch.float))
+        #* Purely for box embedding!
+        self.box_sep = emb_dim # useful for seperation of Centre and Off of box emb.
+    #FIXME - model doesn't work as nicely as hoped, needs fix
     def loss(self, golden_score, corrupted_score):
-        return -(golden_score - corrupted_score - self.margin) + self.T*torch.log((torch.exp((golden_score - corrupted_score - self.margin)/(self.T)) + 1)/2) #NOTE - div by 2, inside log so we remove log 2 as min
+        return -(torch.log(0.5*(golden_score+1) + 0.01) + torch.log(1.01 - (0.5*(corrupted_score+1)))) # log of mean vs in paper mean of log
 
-    #! should not be here ?
-    def _score(self, query_embs, answers):
-        norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answers, p = 2, dim = -1) # type: ignore
-        return torch.sum(query_embs*answers, dim=-1)/norm
+    def _score(self, query_embs, answer_embs):
+        return (2*torch.sigmoid(self.gamma - dist_box(query_embs, answer_embs, self.alpha, self.box_sep))/torch.sigmoid(self.gamma))-1 # for dist = 0, score = 1 else score < 1
 
     def _embed_query(self, batch):
         x, edge_index, edge_attr, batch_id = batch.x, batch.edge_index, batch.edge_attr, batch.batch
@@ -53,8 +49,10 @@ class Model(qa_embedder):
             x = dropout(x)
         #last layer ...
         x = self.linear_layers[-1](x)
-        #* return aggregated embedding nodes by batch id...
-        return self.aggregate(x, batch_id) #! maybe first aggregate then MLP
+        #* aggregated embedding nodes by batch id...
+        x = self.aggregate(x, batch_id)
+        #* create box_embeddings!
+        return box_embs(x, self.box_sep)
 
     def aggregate(self, x, batch_id):
         #* This method receives the batch node embeddings and their corresponding batch member ids,

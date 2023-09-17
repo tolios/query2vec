@@ -62,9 +62,9 @@ for i, dir in enumerate(dir_list):
             dataset = info["dataset"]
 
         print("**************************************************************************************************************")
-
+        #TODO - make run_tests.py script for full automated testing of a given run id model!
         string_list = []
-        for test in range(1, 2): #NOTE - make the other tests for all the good models
+        for test in range(1, 2): # NOTE - make the other tests for all the good models
             string_list.append(f"{dataset}/test_qa_{test}.txt")
 
         command = ["python", f"./query2vec/test.py",

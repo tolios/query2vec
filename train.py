@@ -70,12 +70,12 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             running_val_score += model.evaluate(batch, answers).sum().data.item()
         hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
     #print results...
-    print('Epoch: ', epoch_stop, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
-        ', score: ', "{:.4f}".format(running_score/(len(train))),
-        ', corr_score: ', "{:.4f}".format(running_corr_score/(len(train))),
-        ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
-        ', val hits@3:', "{:.2f}".format(hitsATN*100),
-        ', time: ', "starting...")
+    print('Epoch: ', epoch_stop, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+        ',score:', "{:.4f}".format(running_score/(len(train))),
+        ',corr_score:', "{:.4f}".format(running_corr_score/(len(train))),
+        ',val_score:', "{:.4f}".format(running_val_score/(len(val))),
+        ',val hits@3:', "{:.2f}".format(hitsATN*100),
+        ',time:', "starting...")
     #get metrics
     log_metrics({
         "loss": running_loss/(len(train)),
@@ -129,12 +129,12 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         scheduler.step(hitsATN*100)
 
         #print results...
-        print('Epoch: ', epoch, ', loss: ', "{:.4f}".format(running_loss/(len(train))),
-            ', score: ', "{:.4f}".format(running_score/(len(train))),
-            ', corrupted score: ', "{:.4f}".format(running_corr_score/(len(train))),
-            ', val_score: ', "{:.4f}".format(running_val_score/(len(val))),
-            ', val hits@3:', "{:.2f}".format(hitsATN*100),
-            ', time: ', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
+        print('Epoch: ', epoch, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+            ',score:', "{:.4f}".format(running_score/(len(train))),
+            ',corrupted score:', "{:.4f}".format(running_corr_score/(len(train))),
+            ',val_score:', "{:.4f}".format(running_val_score/(len(val))),
+            ',val hits@3:', "{:.2f}".format(hitsATN*100),
+            ',time:', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
         
         #collecting metrics...
         log_metrics({

@@ -54,9 +54,10 @@ class conv_pipe(Module):
         This module neatly packs all convolution layers in a place
     and forwards all layer embeddings!
     '''
-    def __init__(self, conv_layers: ModuleList):
+    def __init__(self, conv_layers: ModuleList, dynamic=True):
         super().__init__()
         self.conv_layers = conv_layers
+        self.dynamic = dynamic #if falsoe simply acts like typical iteration (no clones) 
 
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor)->Tensor:
         emb_layers = []
@@ -64,10 +65,13 @@ class conv_pipe(Module):
             x = layer(x, edge_index=edge_index, edge_type=edge_attr.squeeze(1))
             x = relu(x)
             # we have to clone to keep the diff structure for backprop
-            emb_layers.append(clone(x))
+            if self.dynamic:
+                emb_layers.append(clone(x))
         #! DYNAMIC EMBEDDING
         #! NEEDS layers to have same emb dim!
         # simply acting with [-1] we get the last x
+        if not self.dynamic:
+            emb_layers.append(x) #only keeping last...
         return stack(emb_layers)
 
 class graph_embedding(Module):

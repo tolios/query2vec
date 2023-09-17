@@ -36,7 +36,7 @@ class Model(qa_embedder):
     def _score(self, query_embs, answer_embs):
         norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answer_embs, p = 2, dim = -1) # type: ignore
         return torch.sum(query_embs*answer_embs, dim=-1)/norm
-
+    #FIXME - check memory problems
     def _embed_query(self, batch):
         x, edge_index, edge_attr, batch_id = batch.x, batch.edge_index, batch.edge_attr, batch.batch
         depth = batch.depth - 1 #we use depth for dynamic embedding! (-1 for correct index pos)
