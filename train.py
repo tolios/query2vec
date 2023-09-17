@@ -7,7 +7,7 @@ from torch.optim import Adagrad
 from graph import *
 from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
-from metrics import hits_at_N_Grouped, hits_at_N
+from metrics import hits_at_N_Grouped
 
 def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     train: Dataset, val: Dataset,
@@ -68,7 +68,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = batch.to(device), answers.to(device)
             #calculate validation scores!!!
             running_val_score += model.evaluate(batch, answers).sum().data.item()
-        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+        hitsATN = hits_at_N_Grouped(val, model, N=3, filter=filter, device=device,disable=True)
     #print results...
     print('Epoch: ', epoch_stop, ',loss:', "{:.4f}".format(running_loss/(len(train))),
         ',score:', "{:.4f}".format(running_score/(len(train))),
@@ -123,7 +123,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
                 batch, answers = batch.to(device), answers.to(device)
                 #calculate validation scores!!!
                 running_val_score += model.evaluate(batch, answers).sum().data.item()
-            hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+            hitsATN = hits_at_N_Grouped(val, model, N=3, filter=filter, device=device,disable=True)
         
         # will make lr smaller if hitsATN doesn't improve
         scheduler.step(hitsATN*100)
