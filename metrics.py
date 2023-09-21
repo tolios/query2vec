@@ -22,6 +22,37 @@ class Filter:
             self.stable_dict = self.load_stable(load_path)
             self.test_dict = self._create_test_dict(test)
 
+        self.masks = self.compile_mask(test)
+    
+    def compile_mask(self, test):
+        '''
+            creates mask for all of test (or val)
+        '''
+        print("compiling mask...")
+        masks = dict()
+        qa_batches = DataLoader(test, batch_size=64)
+        for q, a in qa_batches:
+            q_hashes = q.hash.tolist()
+            a = a.tolist()
+            for q_hash, a_ in zip(q_hashes, a):
+                #extract all answers
+                as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
+                as_ = as_.union(self.test_dict.get(q_hash, set()))
+                #remove given entity
+                as_ = as_ - {a_}
+                #mask creation!
+                #FIXME - should perhaps find a faster way... to make mask
+                #first create shape (num_answers - 1, num_entities)
+                mask = torch.arange(1, 1+self.n_entities)
+                as_ = torch.Tensor(list(as_))
+                #finds the location where each entity is located! (marks as True)
+                mask = torch.where(torch.eq(mask,as_.unsqueeze(1)).any(0),torch.ones(self.n_entities), torch.zeros(self.n_entities))
+                mask = -self.big*mask
+                masks[(q_hash, a_)] = mask
+            # stack for batching...
+        print("Mask compiled!")
+        return masks
+
     def mask(self, q: Batch, a: torch.Tensor)->torch.Tensor:
         '''
         Using the hashes of queries we will create a mask.
@@ -36,22 +67,8 @@ class Filter:
         #batch mask list
         batch_mask = []
         for q_hash, a_ in zip(q_hashes, a):
-            #extract all answers
-            as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
-            as_ = as_.union(self.test_dict.get(q_hash, set()))
-            #remove given entity
-            as_ = as_ - {a_}
-            #mask creation!
-            #first create shape (num_answers - 1, num_entities)
-            mask = torch.arange(1, 1+self.n_entities).expand(len(as_), self.n_entities)
-            #finds the location where each entity is located! (marks as True)
-            mask = mask.eq(torch.Tensor(list(as_)).unsqueeze(1))
-            # .any() makes all of the true entities that are answers to be ignored!
-            mask = mask.any(0)
-            # -big to all correct entities to be ignored!
-            mask = -self.big*mask
             #add to batch mask
-            batch_mask.append(mask)
+            batch_mask.append(self.masks[(q_hash, a_)])
         # stack for batching...
         return torch.stack(batch_mask, dim=0)
     
@@ -59,6 +76,7 @@ class Filter:
         # this method is used when consecutive test runs happen!
         #changes test dict!
         self.test_dict = self._create_test_dict(test)
+        self.masks = self.compile_mask(test)
 
     @classmethod
     def load_stable(cls, path):

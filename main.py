@@ -120,6 +120,8 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as
     log_params(model_args)
     log_params(config["config"])
     log_param("val_filter", args.val_filter)
+    log_param("num_entites", num_entities)
+    log_param("num_relationships", num_relationships)
     model, final_epoch, optimizer, scheduler = training(model, optimizer_dict, scheduler_dict, 
                 train_qa, val_qa, device=DEVICE, epochs = EPOCHS,
                 batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,

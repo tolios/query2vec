@@ -151,10 +151,15 @@ class qa_embedder(Module, ABC):
             query_embs = query_embs.unsqueeze(1)
         return self._score(query_embs, self.embed_entities(answers))
     
+    # def normalize(self):
+    #     #with this method, all normalizations are performed.
+    #     #To be used before mini-batch training in each epoch.
+    #     self.graph_embedding.normalize()
+    
     def normalize(self):
         #with this method, all normalizations are performed.
         #To be used before mini-batch training in each epoch.
-        self.graph_embedding.normalize()
+        pass #TODO - is normalizing worth it???
 
     def to(self, model_device: device):
         self.device = model_device
