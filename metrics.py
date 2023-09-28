@@ -3,6 +3,7 @@ from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 import pickle
+import random
 
 class Filter:
     '''
@@ -24,6 +25,34 @@ class Filter:
 
         self.masks = self.compile_mask(test)
     
+    def negatives(self, q_hashes, num_entities, num_negs=1, start = 1):
+        # works for batch of q_hashes
+        ks = []
+        for h in q_hashes:
+            k = []
+            ans = self.stable_dict[h.item()]
+            while len(k) < num_negs:
+                i = random.randint(start, num_entities)
+                if not (i in ans):
+                    k.append(i)
+            ks.append(k)
+        
+        return torch.Tensor(ks).type(torch.int32)
+    
+    def test_negatives(self, q_hashes, num_entities, num_negs=1, start = 1):
+        # works for batch of q_hashes
+        ks = []
+        for h in q_hashes:
+            k = []
+            ans = self.test_dict[h.item()]
+            while len(k) < num_negs:
+                i = random.randint(start, num_entities)
+                if not (i in ans):
+                    k.append(i)
+            ks.append(k)
+        
+        return torch.Tensor(ks).type(torch.int32)
+
     def compile_mask(self, test):
         '''
             creates mask for all of test (or val)
@@ -37,18 +66,10 @@ class Filter:
             for q_hash, a_ in zip(q_hashes, a):
                 #extract all answers
                 as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
-                as_ = as_.union(self.test_dict.get(q_hash, set()))
+                as_ = as_.union(self.test_dict.get(q_hash))
                 #remove given entity
                 as_ = as_ - {a_}
-                #mask creation!
-                #FIXME - should perhaps find a faster way... to make mask
-                #first create shape (num_answers - 1, num_entities)
-                mask = torch.arange(1, 1+self.n_entities)
-                as_ = torch.Tensor(list(as_))
-                #finds the location where each entity is located! (marks as True)
-                mask = torch.where(torch.eq(mask,as_.unsqueeze(1)).any(0),torch.ones(self.n_entities), torch.zeros(self.n_entities))
-                mask = -self.big*mask
-                masks[(q_hash, a_)] = mask
+                masks[(q_hash, a_)] = list(as_)
             # stack for batching...
         print("Mask compiled!")
         return masks
@@ -66,9 +87,14 @@ class Filter:
         a = a.tolist()
         #batch mask list
         batch_mask = []
+        mask = torch.arange(1, 1+self.n_entities)
         for q_hash, a_ in zip(q_hashes, a):
             #add to batch mask
-            batch_mask.append(self.masks[(q_hash, a_)])
+            as_ = torch.Tensor(self.masks[(q_hash, a_)])
+            #finds the location where each entity is located! (marks as True)
+            mask_ = torch.eq(mask,as_.unsqueeze(1)).any(0)
+            mask_ = -self.big*mask_
+            batch_mask.append(mask_)
         # stack for batching...
         return torch.stack(batch_mask, dim=0)
     
@@ -170,7 +196,9 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
         hits = 0
+        hitsL, hitsR = 0, 0
         n_queries = len(data)
+        nL, nR = 0, 0
         loader = DataLoader(data, batch_size = batch_size)
         #useful tensors...
         zero_tensor, one_tensor = torch.tensor([0]), torch.tensor([1])
@@ -195,8 +223,17 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
             #calculating indices for topk...
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
             #summing hits... +1 very important for correct positioning!!!
-            hits += torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum().item()
-        #return total hits over n_queries!
+            hits_ = torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum(-1)
+            hitsL_ = ((q.edge_attr.squeeze(1)%2 == 0)*hits_).sum().item()
+            hitsR_ = ((q.edge_attr.squeeze(1)%2 != 0)*hits_).sum().item()
+            hits += hitsL_ + hitsR_
+            hitsR += hitsR_
+            hitsL += hitsL_
+            nL += (q.edge_attr.squeeze(1)%2 == 0).sum().item()
+            nR += (q.edge_attr.squeeze(1)%2 != 0).sum().item()
+
+        # return total hits over n_queries!
+        # print(hits/(n_queries), hitsL/nL, hitsR/nR)
         return hits/(n_queries)
 
 def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):

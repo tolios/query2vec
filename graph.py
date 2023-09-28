@@ -97,6 +97,8 @@ class qa_dataset(Dataset):
         with open(self.query_path, 'r') as f:
             for line in f:
                 q, a = ast.literal_eval(line)
+                if q[0][1] % 2 != 0:
+                    continue
                 qas.append((query2graph(q), a))
         print('Done!')
         return qas
@@ -467,7 +469,7 @@ if __name__ == "__main__":
     #Make queries...
     #First extract connections and id mappings...
     train = connections(args.train_path, start=args.start, add_inverse=args.add_inverse)
-    val = connections(args.val_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start, add_inverse=args.add_inverse)
+    val = connections(args.val_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start, add_inverse=args.add_inverse) #TODO - UNKNOWN IF ITS ACTUALLY ALLOWED
     test = connections(args.test_path, entity2id = train.entity2id, relationship2id = train.relationship2id, start=args.start, add_inverse=args.add_inverse)
 
     #save mappings to the qa folder!

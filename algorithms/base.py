@@ -1,8 +1,9 @@
 from __future__ import annotations
 from torch_geometric.data import Batch
-from torch import Tensor, from_numpy, no_grad, mean, device, logical_not, argsort, relu, clone, stack, min, max, cat
+from torch_geometric.nn.norm import GraphNorm
+from torch import Tensor, from_numpy, no_grad, device, logical_not, argsort, relu, clone, stack, min, max, cat, mean, exp, log, softmax, sum
 from torch.nn.functional import normalize
-from torch.nn import Module, Embedding, ModuleList
+from torch.nn import Module, Embedding, ModuleList, init, Dropout, LayerNorm, ModuleList
 from numpy import ndarray
 from abc import ABC, abstractmethod
 
@@ -54,15 +55,19 @@ class conv_pipe(Module):
         This module neatly packs all convolution layers in a place
     and forwards all layer embeddings!
     '''
-    def __init__(self, conv_layers: ModuleList, dynamic=True):
+    def __init__(self, conv_layers: ModuleList, dynamic=True, p = 0.2):
         super().__init__()
         self.conv_layers = conv_layers
+        self.g_norms = ModuleList([LayerNorm(l.out_channels) for l in conv_layers])
+        self.dropouts = ModuleList([Dropout(p = p) for _ in self.g_norms])
         self.dynamic = dynamic #if falsoe simply acts like typical iteration (no clones) 
 
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor)->Tensor:
         emb_layers = []
-        for layer in self.conv_layers:
+        for dropout, g_norm, layer in zip(self.dropouts, self.g_norms, self.conv_layers):
             x = layer(x, edge_index=edge_index, edge_type=edge_attr.squeeze(1))
+            x = g_norm(x)
+            x = dropout(x)
             x = relu(x)
             # we have to clone to keep the diff structure for backprop
             if self.dynamic:
@@ -78,6 +83,7 @@ class graph_embedding(Module):
     def __init__(self, num_entities, emb_dim):
         super().__init__()                              
         self.entity_emb = Embedding(num_entities+1, emb_dim, padding_idx=0) #entities have a padding of zeros!(maybe no)
+        init.xavier_uniform_(self.entity_emb.weight)
     def forward(self, g_batch):
         #*  Receives a batch of graphs, containing entity/relationship ids,
         #* returns embedded batch of graphs ...
@@ -136,7 +142,9 @@ class qa_embedder(Module, ABC):
         #* Main method of the class used for training...
         batch = self.embed_query(batch) #calculate query embedding
         golden_score = self.score(batch, answers)
-        corrupted_score = mean(self.score(batch, corrupted, unsqueeze=True), dim=-1) # avg corr score!
+        cs = self.score(batch, corrupted, unsqueeze=True)
+        #corrupted_score = sum(cs*softmax(cs, dim=-1), dim=-1) # avg corr score! #FIXME - this is highly controversial
+        corrupted_score = max(cs, dim=-1)[0]
         return self.loss(golden_score, corrupted_score), golden_score, corrupted_score
 
     def evaluate(self, query: Batch, answer: Tensor, unsqueeze: bool = False):

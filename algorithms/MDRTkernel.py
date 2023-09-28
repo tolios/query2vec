@@ -6,6 +6,7 @@ from torch_scatter import scatter_add, scatter_max, scatter_mean
 import torch
 import torch.nn as nn
 from .base import qa_embedder, conv_pipe, dist_box, root_embs
+import torch.nn.functional as F
 
 class Model(qa_embedder): 
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
@@ -47,7 +48,7 @@ class Model(qa_embedder):
         # nn.ModuleList allows to the lists to be tracked by .to for gpus!
         self.conv_pipe = conv_pipe(nn.ModuleList([kernel_(l, r, num_relationships, 
                 num_bases=num_bases, num_blocks=num_blocks, is_sorted=True) \
-                    for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])]), dynamic=dynamic)
+                    for l, r in zip([emb_dim]+conv_dims, ([[]]+conv_dims)[1:])]), dynamic=dynamic, p = p)
         self.linear_layers = nn.ModuleList([nn.Linear(l, r) for l, r in zip([conv_dims[-1]]+linear_dims+[[]], ([[]]+linear_dims+[heads*emb_dim])[1:])])
         self.dropouts = nn.ModuleList([nn.Dropout(p=p) for _ in linear_dims])
         self.reshaper = lambda x: x.reshape(-1, heads, emb_dim) # from (-1, heads*emb_dim) to (-1, heads, emb_dim)
@@ -63,8 +64,9 @@ class Model(qa_embedder):
 
     def _score(self, query_embs, answers):
         answers = answers.unsqueeze(-2)
-        norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answers, p = 2, dim = -1) # type: ignore
-        scores = torch.sum(query_embs*answers, dim=-1)/norm
+        # norm = torch.norm(query_embs, p = 2, dim = -1)*torch.norm(answers, p = 2, dim = -1) # type: ignore
+        # scores = torch.sum(query_embs*answers, dim=-1)/norm
+        scores = F.cosine_similarity(query_embs, answers, dim=-1)
         #get max of those scores...
         return torch.max(scores, -1)[0]
 
@@ -90,6 +92,7 @@ class Model(qa_embedder):
         x = self.aggregate(x, edge_index, batch_id)
         #reshape to [-1, heads, emb]
         x = self.reshaper(x) # reshape for many head calculation
+
         return x
 
     def aggregate(self, x, edge_index, batch_id):

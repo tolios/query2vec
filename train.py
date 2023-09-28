@@ -3,7 +3,7 @@ import os
 import torch
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
-from torch.optim import Adagrad, AdamW
+from torch.optim import Adagrad, AdamW, Adam, SGD
 from graph import *
 from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
@@ -13,7 +13,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     train: Dataset, val: Dataset,
     epochs = 50, batch_size = 1024, val_batch_size = 1024, num_negs = 1,
     lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, filter=None, 
-    scheduler_patience=3, scheduler_factor=0.1, scheduler_threshold=0.1,
+    scheduler_patience=3, scheduler_factor=0.1, scheduler_threshold=0.1, val_every=10,
     device=torch.device('cpu')):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
@@ -37,7 +37,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     t_start = time.time()
     #for early stopping!
     #start with huge number!
-    highest_val_hitsAt3 = 0.0
+    highest_val_hitsAt3 = -0.1
     stop_counter = 1
     epoch_stop = 0 #keeps track of last epoch of checkpoint...
     #get init scores!!!
@@ -48,12 +48,17 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         running_score = 0.0
         running_corr_score = 0.0
         running_val_score = 0.0
+        running_val_loss = 0.0
+        running_val_corr_score = 0.0
         #calculate training losses...
+        q_norms = 0
+        a_norms = 0
         for qa_batch in train_loader:
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs,start = 1)
+            corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
@@ -61,28 +66,46 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             running_loss += loss.sum().data.item()
             running_score += score.sum().data.item()
             running_corr_score += corr_score.sum().data.item()
+            q_embs = model.embed_query(batch)
+            a_embs = model.embed_entities(answers)
+                
+            q_norms += q_embs.norm(p=2, dim = -1).sum().item()
+            a_norms += a_embs.norm(p=2, dim = -1).sum().item()
+        print("q_norms:", q_norms/len(train), "a_norms:", a_norms/len(train))
         #calculate val loss...
         for qa_batch in val_loader:
             #questions and answers!
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
+            #get corrupted triples
+            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+            corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            corrupted = corrupted.to(device)
             #calculate validation scores!!!
-            running_val_score += model.evaluate(batch, answers).sum().data.item()
-        print("hdiwh")
+            #calculate loss...
+            loss, score, corr_score = model(batch, answers, corrupted)
+            #getting losses...
+            running_val_loss += loss.sum().data.item()
+            running_val_score += score.sum().data.item()
+            running_val_corr_score += corr_score.sum().data.item()
         hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
     #print results...
     print('Epoch: ', epoch_stop, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+        ",val loss:", "{:.4f}".format(running_val_loss/(len(val))),
         ',score:', "{:.4f}".format(running_score/(len(train))),
-        ',corr_score:', "{:.4f}".format(running_corr_score/(len(train))),
-        ',val_score:', "{:.4f}".format(running_val_score/(len(val))),
+        ',val score:', "{:.4f}".format(running_val_score/(len(val))),
+        ',corr score:', "{:.4f}".format(running_corr_score/(len(train))),
+        ',val corr:', "{:.4f}".format(running_val_corr_score/(len(val))),
         ',val hits@3:', "{:.2f}".format(hitsATN*100),
         ',time:', "starting...")
     #get metrics
     log_metrics({
         "loss": running_loss/(len(train)),
+        "val loss": running_val_loss/(len(val)),
         "golden score": running_score/(len(train)),
-        "corr score": running_corr_score/(len(train)),
         "val score": running_val_score/(len(val)),
+        "corr score": running_corr_score/(len(train)),
+        "val corr": running_val_corr_score/(len(val)),
         "hitsAt3": hitsATN*100,
         }, 0)
     #make temp dir
@@ -94,61 +117,100 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         running_loss = 0.0
         running_score = 0.0
         running_corr_score = 0.0
+        running_val_score = 0.0
+        running_val_loss = 0.0
+        running_val_corr_score = 0.0
         # #perform normalizations before entering the mini-batch.
+        q_norms = 0
+        a_norms = 0
         model.normalize()
         for qa_batch in train_loader:
+            #zero out gradients...
+            optimizer.zero_grad()
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+            corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
-            #zero out gradients...
-            optimizer.zero_grad()
+            q_embs = model.embed_query(batch)
+            a_embs = model.embed_entities(answers)
+            with torch.no_grad():
+                q_norms += q_embs.norm(p=2, dim = -1).sum().item()
+                a_norms += a_embs.norm(p=2, dim = -1).sum().item()
             #loss backward
-            loss.sum().backward()
+            (loss.mean()+0.000001*(q_embs.norm(p=2)**2) + 0.000001*(a_embs.norm(p=2)**2)).backward() #FIXME - might need .sum
+            # loss.mean().backward()
             #update parameters!
             optimizer.step()
             #getting losses...
             running_loss += loss.sum().data.item()
             running_score += score.sum().data.item()
             running_corr_score += corr_score.sum().data.item()
+        print("q_norms:", q_norms/len(train), "a_norms:", a_norms/len(train))
         #calculating val energy....
         model.eval()
         with torch.no_grad():
-            running_val_score = 0.0
             for qa_batch in val_loader:
                 #questions and answers!
                 batch, answers = qa_batch
                 batch, answers = batch.to(device), answers.to(device)
+                #get corrupted triples
+                # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+                corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+                corrupted = corrupted.to(device)
                 #calculate validation scores!!!
-                running_val_score += model.evaluate(batch, answers).sum().data.item()
-            print("hdiwh")
-            hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
-        
-        # will make lr smaller if hitsATN doesn't improve
-        scheduler.step(hitsATN*100)
+                #calculate loss...
+                loss, score, corr_score = model(batch, answers, corrupted)
+                #getting losses...
+                running_val_loss += loss.sum().data.item()
+                running_val_score += score.sum().data.item()
+                running_val_corr_score += corr_score.sum().data.item()
+            
+            if epoch % val_every == 0:
+                hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+                # will make lr smaller if hitsATN doesn't improve
+                scheduler.step(hitsATN*100)
 
         #print results...
-        print('Epoch: ', epoch, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+        if epoch % val_every == 0:
+            print('Epoch: ', epoch, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+                ',val loss:', "{:.4f}".format(running_val_loss/(len(val))),
+                ',score:', "{:.4f}".format(running_score/(len(train))),
+                ',val score:', "{:.4f}".format(running_val_score/(len(val))),
+                ',corr score:', "{:.4f}".format(running_corr_score/(len(train))),
+                ',val corr:', "{:.4f}".format(running_val_corr_score/(len(val))),
+                ',val hits@3:', "{:.2f}".format(hitsATN*100),
+                ',time:', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
+        else:
+            print('Epoch: ', epoch, ',loss:', "{:.4f}".format(running_loss/(len(train))),
+            ',val loss:', "{:.4f}".format(running_val_loss/(len(val))),
             ',score:', "{:.4f}".format(running_score/(len(train))),
-            ',corrupted score:', "{:.4f}".format(running_corr_score/(len(train))),
-            ',val_score:', "{:.4f}".format(running_val_score/(len(val))),
-            ',val hits@3:', "{:.2f}".format(hitsATN*100),
+            ',val score:', "{:.4f}".format(running_val_score/(len(val))),
+            ',corr score:', "{:.4f}".format(running_corr_score/(len(train))),
+            ',val corr:', "{:.4f}".format(running_val_corr_score/(len(val))),
             ',time:', "{:.4f}".format((time.time()-t_start)/60), 'min(s)')
         
         #collecting metrics...
         log_metrics({
             "loss": running_loss/(len(train)),
+            "val loss": running_val_loss/(len(val)),
             "golden score": running_score/(len(train)),
-            "corr score": running_corr_score/(len(train)),
             "val score": running_val_score/(len(val)),
-            "hitsAt3": hitsATN*100,
+            "corr score": running_corr_score/(len(train)),
+            "val corr": running_val_corr_score/(len(val)),
         }, epoch)
 
+        if epoch % val_every == 0:
+            #collecting metrics...
+            log_metrics({
+                "hitsAt3": hitsATN*100,
+            }, epoch)
+
         #implementation of early stop using val_energy (fastest route (could use mean_rank for example))
-        if patience != -1:
+        if patience != -1 and epoch % val_every == 0:
             if highest_val_hitsAt3 < hitsATN:
                 #setting new score!
                 highest_val_hitsAt3 = hitsATN

@@ -69,6 +69,7 @@ LEARNING_RATE = config["config"].get("lr", 0.01)
 WEIGHT_DECAY = config["config"].get("wd", 0.001)
 PATIENCE = config["config"].get("patience", -1)
 NUM_NEGS = config["config"].get("num_negs", 1)
+VAL_EVERY = config["config"].get("val_every", 10)
 scheduler_patience = config["config"].get("scheduler_patience", 3) 
 scheduler_factor = config["config"].get("scheduler_factor", 0.1)
 scheduler_threshold = config["config"].get("scheduler_threshold", 0.1)
@@ -92,9 +93,9 @@ val_qa = qa_dataset(VAL_PATH)
 if pretrained:
     #load model!    
     #pretrained should end in .../
-    model = load_model(pretrained+"model")
-    optimizer_dict = load_state_dict(pretrained+"optimizer")
-    scheduler_dict = load_state_dict(pretrained+"scheduler")
+    model = load_model("runs:/"+pretrained+"/model")
+    optimizer_dict = load_state_dict("runs:/"+pretrained+"/optimizer")
+    scheduler_dict = load_state_dict("runs:/"+pretrained+"/scheduler")
 
 else:
 
@@ -120,12 +121,12 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as
     log_params(model_args)
     log_params(config["config"])
     log_param("val_filter", args.val_filter)
-    log_param("num_entites", num_entities)
-    log_param("num_relationships", num_relationships)
+    log_param("num_entites", model.num_entities)
+    log_param("num_relationships", model.num_relationships)
     model, final_epoch, optimizer, scheduler = training(model, optimizer_dict, scheduler_dict, 
                 train_qa, val_qa, device=DEVICE, epochs = EPOCHS,
                 batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,
-                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter,
+                lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter, val_every=VAL_EVERY,
                 scheduler_patience = scheduler_patience, scheduler_factor = scheduler_factor, scheduler_threshold = scheduler_threshold)
     log_param("final_epoch", final_epoch)
     
