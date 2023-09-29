@@ -18,17 +18,14 @@ parser.add_argument("save_val",
 #finds all arguments...
 args = parser.parse_args()
 
-train = qa_dataset(args.train)
-val = qa_dataset(args.valid)
-
 if args.save_val:
     print("Creating filter for val using training data!")
-    dict_ = Filter._create_train_dict(train)
+    dict_ = Filter._create_train_dict(args.train)
     with open(args.save_val, "wb") as f:
         pickle.dump(dict_, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 print("Creating filter for test using train and val ...")
-dict_ = Filter._create_stable_dict(train, val)
+dict_ = Filter._create_stable_dict(args.train, args.valid)
 
 with open(args.save, "wb") as f:
     pickle.dump(dict_, f, protocol=pickle.HIGHEST_PROTOCOL)

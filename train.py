@@ -58,7 +58,6 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
             corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
-            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
@@ -78,7 +77,6 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate validation scores!!!
@@ -123,14 +121,13 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         # #perform normalizations before entering the mini-batch.
         q_norms = 0
         a_norms = 0
-        model.normalize()
+
         for qa_batch in train_loader:
             #zero out gradients...
             optimizer.zero_grad()
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
@@ -158,7 +155,6 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
                 batch, answers = qa_batch
                 batch, answers = batch.to(device), answers.to(device)
                 #get corrupted triples
-                # corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
                 corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
                 corrupted = corrupted.to(device)
                 #calculate validation scores!!!
@@ -247,8 +243,6 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         os.rmdir("./temp")
 
     print('Training ends ...')
-    #normalize the embeddings (to be exactly norm2 == 1)
-    model.normalize()
     #putting model weights to cpu (only useful when we have gpu training...)
     model.to(torch.device('cpu'))
     #returning model as well as optimizer and actual last epoch (early stopping)...

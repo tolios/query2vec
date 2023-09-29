@@ -76,9 +76,9 @@ if filtering:
         print("train data and val data REQUIRED when filtering!!!")
         raise 
     
-    if not args.filter_path:
-        train = qa_dataset(args.train_data)
-        val = qa_dataset(args.val_data)
+    # if not args.filter_path:
+    #     train = qa_dataset(args.train_data)
+    #     val = qa_dataset(args.val_data)
 
     #directory where qas are stored...
     id_dir=os.path.dirname(args.train_data)
@@ -101,17 +101,16 @@ for i, test_file in enumerate(test_data):
         if i == 0:
             if args.filter_path:
                 print("Loading filter")
-                filter = Filter(None, None, test, num_entities, big=args.big, load_path=args.filter_path)
+                filter = Filter(None, None, test_file, num_entities, big=args.big, load_path=args.filter_path)
                 print("filter loaded!")
             else:
                 print("creating filter...")
-                filter = Filter(train, val, test, num_entities, big = args.big)
-                del train, val #not needed anymore!
+                filter = Filter(args.train_data, args.val_data, test_file, num_entities, big = args.big)
                 print("filter made successfully!")
         else:
             # update to new test
             print("updating filter...")
-            filter.change_test(test)
+            filter.change_test(test_file)
             print("done!")
 
     logs[test_file] = {}

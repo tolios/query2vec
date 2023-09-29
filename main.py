@@ -111,7 +111,7 @@ else:
     scheduler_dict = {}
 
 if args.val_filter:
-    filter = Filter(None, None, val_qa, model.num_entities, load_path=args.val_filter)
+    filter = Filter(None, None, VAL_PATH, model.num_entities, load_path=args.val_filter)
 else:
     filter = None
 

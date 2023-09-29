@@ -4,6 +4,8 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 import pickle
 import random
+import ast
+from form import hashQuery
 
 class Filter:
     '''
@@ -59,17 +61,13 @@ class Filter:
         '''
         print("compiling mask...")
         masks = dict()
-        qa_batches = DataLoader(test, batch_size=64)
-        for q, a in qa_batches:
-            q_hashes = q.hash.tolist()
-            a = a.tolist()
-            for q_hash, a_ in zip(q_hashes, a):
-                #extract all answers
-                as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
-                as_ = as_.union(self.test_dict.get(q_hash))
+        for q_hash, ans in Filter._load(test):
+            #extract all answers
+            as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
+            as_ = as_.union(self.test_dict.get(q_hash))
+            for a_ in ans:
                 #remove given entity
-                as_ = as_ - {a_}
-                masks[(q_hash, a_)] = list(as_)
+                masks[(q_hash, a_)] = list(as_ - {a_})
             # stack for batching...
         print("Mask compiled!")
         return masks
@@ -98,7 +96,7 @@ class Filter:
         # stack for batching...
         return torch.stack(batch_mask, dim=0)
     
-    def change_test(self, test: Dataset):
+    def change_test(self, test):
         # this method is used when consecutive test runs happen!
         #changes test dict!
         self.test_dict = self._create_test_dict(test)
@@ -110,57 +108,46 @@ class Filter:
             return pickle.load(f)
         
     @staticmethod
-    def _create_train_dict(train: Dataset)->dict:
+    def _create_train_dict(train)->dict:
         #this function creates a dictionary which uses the query hash
         #and contains the set of corresponding answers that exist for train, val
         dict_ = dict()
-        train = DataLoader(train, batch_size=1)
-        for q, a in train:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
+        for h, ans in Filter._load(train):
+            dict_[h] = set(ans)
         return dict_
 
     @staticmethod
-    def _create_stable_dict(train: Dataset, val: Dataset)->dict:
+    def _create_stable_dict(train, val)->dict:
         #this function creates a dictionary which uses the query hash
         #and contains the set of corresponding answers that exist for train, val
         dict_ = dict()
-        train = DataLoader(train, batch_size=1)
-        for q, a in train:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
+        for h, ans in Filter._load(train):
+            dict_[h] = set(ans)
+
+        for h, ans in Filter._load(val):
+            if h not in dict_:
+                dict_[h] = set(ans)
             else:
-                dict_[q].add(a)
-        val = DataLoader(val, batch_size=1)
-        for q, a in val:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
+                dict_[h] = dict_[h] | set(ans)
         return dict_
 
     @staticmethod
-    def _create_test_dict(test: Dataset)->dict:
+    def _create_test_dict(test)->dict:
         #this function creates a dictionary for test only
         # seperable so it cna be changed!
         dict_ = dict()
-        test = DataLoader(test, batch_size=1)
-        for q, a in test:
-            q = q.hash.item()
-            a = a.item()
-            if q not in dict_:
-                dict_[q] = {a}
-            else:
-                dict_[q].add(a)
+        for h, ans in Filter._load(test):
+            dict_[h] = set(ans)
         return dict_
+
+    @staticmethod
+    def _load(path):
+        # yield
+        with open(path, 'r') as f:
+            for line in f:
+                q, ans = ast.literal_eval(line)
+                h = hashQuery(q)
+                yield (h, ans)
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval

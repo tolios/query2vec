@@ -1,7 +1,6 @@
 from __future__ import annotations
 from torch_geometric.data import Batch
-from torch_geometric.nn.norm import GraphNorm
-from torch import Tensor, from_numpy, no_grad, device, logical_not, argsort, relu, clone, stack, min, max, cat, mean, exp, log, softmax, sum
+from torch import Tensor, from_numpy, no_grad, device, logical_not, argsort, relu, clone, stack, min, max, cat, softmax, sum, tensor, float
 from torch.nn.functional import normalize
 from torch.nn import Module, Embedding, ModuleList, init, Dropout, LayerNorm, ModuleList
 from numpy import ndarray
@@ -107,11 +106,12 @@ class qa_embedder(Module, ABC):
     some to be developed!
     '''
 
-    def __init__(self, num_entities, emb_dim):
+    def __init__(self, num_entities, emb_dim, T_emb = 0.25):
         super().__init__()
         #Model weights!
         self.graph_embedding = graph_embedding(num_entities, emb_dim)
         self.device = device("cpu") #puts weights to cpu
+        self.register_buffer('T_emb', tensor([T_emb], dtype=float))
 
     @abstractmethod
     def loss(self, golden_score: Tensor, corrupted_score: Tensor)->Tensor:
@@ -143,8 +143,7 @@ class qa_embedder(Module, ABC):
         batch = self.embed_query(batch) #calculate query embedding
         golden_score = self.score(batch, answers)
         cs = self.score(batch, corrupted, unsqueeze=True)
-        #corrupted_score = sum(cs*softmax(cs, dim=-1), dim=-1) # avg corr score! #FIXME - this is highly controversial
-        corrupted_score = max(cs, dim=-1)[0]
+        corrupted_score = sum(cs*softmax(cs/(self.T_emb), dim=-1), dim=-1) # avg corr score! #FIXME - this is highly controversial
         return self.loss(golden_score, corrupted_score), golden_score, corrupted_score
 
     def evaluate(self, query: Batch, answer: Tensor, unsqueeze: bool = False):
@@ -158,16 +157,6 @@ class qa_embedder(Module, ABC):
             #* Unsqueeze useful when answer is of shape (batch_size, n), instead of (batch_size)
             query_embs = query_embs.unsqueeze(1)
         return self._score(query_embs, self.embed_entities(answers))
-    
-    # def normalize(self):
-    #     #with this method, all normalizations are performed.
-    #     #To be used before mini-batch training in each epoch.
-    #     self.graph_embedding.normalize()
-    
-    def normalize(self):
-        #with this method, all normalizations are performed.
-        #To be used before mini-batch training in each epoch.
-        pass #TODO - is normalizing worth it???
 
     def to(self, model_device: device):
         self.device = model_device

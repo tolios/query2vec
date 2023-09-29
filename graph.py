@@ -96,10 +96,9 @@ class qa_dataset(Dataset):
         print('Extracting qa data...')
         with open(self.query_path, 'r') as f:
             for line in f:
-                q, a = ast.literal_eval(line)
-                if q[0][1] % 2 != 0:
-                    continue
-                qas.append((query2graph(q), a))
+                q, ans = ast.literal_eval(line) #get query and total answers
+                for a in ans:
+                    qas.append((query2graph(q), a))
         print('Done!')
         return qas
 
@@ -109,6 +108,7 @@ class connections():
     It provides sampling methods. As well as other utilities...
     To be used for extraction of data, as well as query & answer generation (sampling).
 
+    version: 2.0: calculate all answers
     version: 1.1: added inverses | r, r/-1 !!!
 
     '''
@@ -125,7 +125,7 @@ class connections():
         else:
             #use given mappings (useful for val and test data...)
             self.entity2id, self.relationship2id = entity2id, relationship2id
-        self._2relationships, self._2heads = self.extract_connections(path, self.entity2id, self.relationship2id, add_inverse = add_inverse)
+        self._2relationships, self._2heads, self._2tails = self.extract_connections(path, self.entity2id, self.relationship2id, add_inverse = add_inverse)
         self.add_inverse = add_inverse
 
     def __contains__(self, key: tuple)->bool:
@@ -182,6 +182,7 @@ class connections():
     def extract_connections(self, triplet_file: str, entity2id:dict, relationship2id:dict, add_inverse: bool = False)->tuple:
         _2relationships = dict()
         _2heads = dict()
+        _2tails = dict()
 
         with open(triplet_file, 'r') as f:
             for line in f:
@@ -204,6 +205,12 @@ class connections():
                     _2heads[(r,t)].add(h)
                 else:
                     _2heads[(r,t)].add(h)
+                #2tails
+                if (h, r) not in _2tails:
+                    _2tails[(h, r)] = set()
+                    _2tails[(h, r)].add(t)
+                else:
+                    _2tails[(h, r)].add(t)
                 #inverses!
                 if add_inverse:
                     #2relationships
@@ -218,8 +225,14 @@ class connections():
                         _2heads[(r_inv,h)].add(t)
                     else:
                         _2heads[(r_inv,h)].add(t)
+                    #2tails
+                    if (t, r_inv) not in _2tails:
+                        _2tails[(t, r_inv)] = set()
+                        _2tails[(t, r_inv)].add(h)
+                    else:
+                        _2tails[(t, r_inv)].add(h)
         #return details
-        return _2relationships, _2heads
+        return _2relationships, _2heads, _2tails
 
     def combine(self, other: connections)->None:
         #* This function combines the knowledge of two graphs into one.
@@ -235,6 +248,12 @@ class connections():
                 self._2heads[key] = self._2heads[key] | other._2heads[key]
             else:
                 self._2heads[key] = other._2heads[key]
+        
+        for key in other._2tails:
+            if key in self._2tails:
+                self._2tails[key] = self._2tails[key] | other._2tails[key]
+            else:
+                self._2tails[key] = other._2tails[key]
 
 
     def sample_link(self, t: int)->tuple:
@@ -257,8 +276,7 @@ class connections():
         query = []
         known_link = set()
         #pick a start!
-        answer = self.random_answer()
-        t = answer
+        t = self.random_answer()
         visited_nodes = [t] #nodes known to the graph!
         variables = {t: '_1'} #nodes that have incoming nodes! -e->(v) 
         vars = 1 #num of variables! #_num important to keep order for dag!
@@ -270,10 +288,10 @@ class connections():
             #rejections...
             if h == t:
                 #self loops are killed on the spot...
-                return [], answer, uniques
+                return [], uniques
             if (h, r, t) in known_link:
                 #since it generated the same link twice, simply reject... (guarrantees n edges)
-                return [], answer, uniques
+                return [], uniques
             else:
                 known_link.add((h, r, t))
             if h in variables:
@@ -283,7 +301,7 @@ class connections():
                 #must order_h > order_t, else cycle!!!
                 if order_h <= order_t:
                     #cycle, therefore reject...
-                    return [], answer, uniques
+                    return [], uniques
             #name new variable for each new entity as tail!
             if t not in variables:
                 vars += 1
@@ -304,10 +322,10 @@ class connections():
             if t not in self._2relationships:
                 #if we do have enough, keep. Else reject!
                 if len(query) != num_edges:
-                    return [], answer, uniques
+                    return [], uniques
         #check if query contains one of the required links, else return malformed...
         if not has_required:
-            return [], answer, uniques
+            return [], uniques
         #Replace with variables!
         true_query = []
         for link in query:
@@ -320,24 +338,23 @@ class connections():
         q_struct = structure(true_query)
 
         if not (q_struct in structures):
-            return [], answer, uniques
+            return [], uniques
 
-        # find if unique qa
-        qa_hash = hash((hashQuery(true_query), answer))
+        # find if unique query
+        q_hash = hashQuery(true_query)
 
         # unique representation...
-        if qa_hash in uniques:
-            return [], answer, uniques # rejected because qa pair has been already produced!
+        if q_hash in uniques:
+            return [], uniques # rejected because query has been sampled already!
         else:
-            uniques.add(qa_hash)
+            uniques.add(q_hash)
 
-        return true_query, answer, uniques
+        return true_query, uniques
 
     def generate_1hops(self):
         #* This method yields all 1 hop queries and their answers!
-        for key in self._2heads:
-            for h in self._2heads[key]:
-                yield ([[h, key[0], '_1']], key[1])
+        for key, value in self._2tails.items():
+            yield ([[key[0], key[1], '_1']], list(value))
 
     def write_qas(self, qa_name, other: connections|None = None,
             query_orders: list = [[(2, 6000)]],
@@ -388,11 +405,13 @@ class connections():
                         pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                         while len(uniques) < num_queries and tries < tot_tries:
                             #generate query...
-                            q, a, uniques = self.sample_qa(num_edges=num_edges, 
+                            q, uniques = self.sample_qa(num_edges=num_edges, 
                                                 other=other, uniques=uniques, structures=structures_)
                             #write (q, a) if q non empty
                             if q:
-                                f.write(str((q, a))+'\n')
+                                # get all answers!
+                                ans = self.get_answers_from_query(q, other=other)
+                                f.write(str((q, ans))+'\n')
                                 pbar.update(1)
                             else:
                                 tries += 1
@@ -401,6 +420,91 @@ class connections():
                             print(f'Exceeted tot_tries = {tot_tries}')
                 
                 print(f"Finished {name} !")
+
+    def get_answers_from_query(self, query, other: connections|None = None):
+        #NOTE - Receives query and produces all available answers.
+        #if other given, all answers must have used at least one
+        #link from other. (Used for val, test)
+        variables = dict()
+        required = dict()
+        for _, _, t in query:
+            if t in required:
+                required[t] += 1
+            else:
+                required[t] = 1
+        while query:
+            new_query = []
+            not_now = set() #gets reset every time
+            for link in query:
+                h, r, t = link
+                if isinstance(h, int):
+                    # since anchor node simply get all variable answers...
+                    if t in variables:
+                        variables[t] = self.intersect_variables(variables[t], self.get_tails_from_anchor(h, r, other=other))
+                    else:
+                        variables[t] = self.get_tails_from_anchor(h, r, other=other)
+                    #remove required contribution
+                    required[t] = required[t] - 1
+                    if required[t] == 0:
+                        not_now.add(t)
+                else:
+                    if h not in variables:
+                        # keep for the new query
+                        new_query.append([h, r, t])
+                    else:
+                        if required[h] == 0:
+                            if not (h in not_now):
+                                # get answers
+                                if t in variables:
+                                    variables[t] = self.intersect_variables(variables[t],self.get_tails_from_vars(variables[h], r, other=other))
+                                else:
+                                    variables[t] = self.get_tails_from_vars(variables[h], r, other=other)
+                            #remove required contribution
+                            required[t] = required[t] - 1
+                            if required[t] == 0:
+                                not_now.add(t)
+                        else:
+                            new_query.append([h, r, t])
+            query = new_query
+        
+        # get only "_1" (., true) answers if we have an other!
+        return [i for i, in_other in variables["_1"] if (in_other or (not other))]
+    
+    def get_tails_from_vars(self, hs, r, other: connections|None = None):
+        other_tails = set()
+        tails = set()
+        for h, in_other in hs:
+            if other:
+                other_tails = other_tails | {(i, True) for i in other._2tails.get((h, r), set())} #set true, since from other
+            tails = tails | {(i, in_other) for i in self._2tails.get((h, r), set())}
+        return tails | other_tails
+    
+    def get_tails_from_anchor(self, anchor, r,  other: connections|None = None):
+        if other:
+            other_tails = {(i, True) for i in other._2tails.get((anchor, r), set())} #set true, since from other
+        else:
+            other_tails = set()
+        tails = {(i, False) for i in self._2tails.get((anchor, r), set())}
+        return tails | other_tails
+
+
+    @staticmethod
+    def intersect_variables(left, right):
+        result = set()
+        #iterate with the lower of the two
+        if len(left) > len(right):
+            left, right = right, left
+        for v, in_other in left:
+            # if exists in left acts with an or for the bool parameter
+            # we describe if v has info that has used at east one from the other links (the missing)
+            if (v, True) in right:
+                result.add((v, True))
+            if (v, False) in right:
+                result.add((v, in_other))
+        
+        return result
+
+
 
 def corrupted_answer(num_entities, batch_size, num_negs=1,start = 1):
     return torch.randint(high=num_entities, size=(batch_size[0], num_negs))+start
