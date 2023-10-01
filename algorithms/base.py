@@ -54,12 +54,12 @@ class conv_pipe(Module):
         This module neatly packs all convolution layers in a place
     and forwards all layer embeddings!
     '''
-    def __init__(self, conv_layers: ModuleList, dynamic=True, p = 0.2):
+    def __init__(self, conv_layers: ModuleList, dynamic=False, p = 0.2):
         super().__init__()
         self.conv_layers = conv_layers
         self.g_norms = ModuleList([LayerNorm(l.out_channels) for l in conv_layers])
         self.dropouts = ModuleList([Dropout(p = p) for _ in self.g_norms])
-        self.dynamic = dynamic #if falsoe simply acts like typical iteration (no clones) 
+        self.dynamic = dynamic #if false simply acts like typical iteration (no clones) 
 
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor)->Tensor:
         emb_layers = []

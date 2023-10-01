@@ -62,18 +62,16 @@ def query2graph(query: list)->Data:
     #* Return Data...
     # with hash
     q_hash = hashQuery(query)
-    # structure
-    q_struct = structure(query)
-    # depth
-    q_depth = DEPTH_DICT[q_struct]
+    # # structure
+    # q_struct = structure(query)
+    # # depth
+    # q_depth = DEPTH_DICT[q_struct]
 
     return Data(
         x=x, 
         edge_index=edge_index, 
-        edge_attr=edge_attr, 
-        hash=q_hash, 
-        structure=q_struct, 
-        depth=q_depth
+        edge_attr=edge_attr,
+        hash=q_hash
     )
 
 class qa_dataset(Dataset):
@@ -399,14 +397,15 @@ class connections():
                             for qa in tqdm(self.generate_1hops(), desc=f'Generating 1hops inside {name}'):
                                 f.write(str(qa)+'\n')
                     #now we should use the sampling method for the rest...
-                    for num_edges, num_queries in query_orders_:
+                    for  orders_, structure in zip(query_orders_, structures_):
+                        num_edges, num_queries = orders_
                         uniques = set()
                         tries = 1 #used for a cuttoff if the program takes too long?!
                         pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                         while len(uniques) < num_queries and tries < tot_tries:
                             #generate query...
                             q, uniques = self.sample_qa(num_edges=num_edges, 
-                                                other=other, uniques=uniques, structures=structures_)
+                                                other=other, uniques=uniques, structures=structure)
                             #write (q, a) if q non empty
                             if q:
                                 # get all answers!
@@ -448,23 +447,19 @@ class connections():
                     if required[t] == 0:
                         not_now.add(t)
                 else:
-                    if h not in variables:
-                        # keep for the new query
-                        new_query.append([h, r, t])
-                    else:
-                        if required[h] == 0:
-                            if not (h in not_now):
-                                # get answers
-                                if t in variables:
-                                    variables[t] = self.intersect_variables(variables[t],self.get_tails_from_vars(variables[h], r, other=other))
-                                else:
-                                    variables[t] = self.get_tails_from_vars(variables[h], r, other=other)
-                            #remove required contribution
-                            required[t] = required[t] - 1
-                            if required[t] == 0:
-                                not_now.add(t)
+                    # if h has received values and they are all of them and its time
+                    if (h in variables) and (required[h] == 0) and (not (h in not_now)):
+                        # get answers
+                        if t in variables:
+                            variables[t] = self.intersect_variables(variables[t],self.get_tails_from_vars(variables[h], r, other=other))
                         else:
-                            new_query.append([h, r, t])
+                            variables[t] = self.get_tails_from_vars(variables[h], r, other=other)
+                        #remove required contribution
+                        required[t] = required[t] - 1
+                        if required[t] == 0:
+                            not_now.add(t)
+                    else:
+                        new_query.append([h, r, t]) #keep for next round
             query = new_query
         
         # get only "_1" (., true) answers if we have an other!

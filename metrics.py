@@ -210,17 +210,8 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
             #calculating indices for topk...
             _, _indices = torch.topk(scores, N, dim=1, largest=True) #! changed: scores goes big!
             #summing hits... +1 very important for correct positioning!!!
-            hits_ = torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum(-1)
-            hitsL_ = ((q.edge_attr.squeeze(1)%2 == 0)*hits_).sum().item()
-            hitsR_ = ((q.edge_attr.squeeze(1)%2 != 0)*hits_).sum().item()
-            hits += hitsL_ + hitsR_
-            hitsR += hitsR_
-            hitsL += hitsL_
-            nL += (q.edge_attr.squeeze(1)%2 == 0).sum().item()
-            nR += (q.edge_attr.squeeze(1)%2 != 0).sum().item()
-
+            hits += torch.where(torch.eq(_indices+plus, a), one_tensor, zero_tensor).sum().item()
         # return total hits over n_queries!
-        # print(hits/(n_queries), hitsL/nL, hitsR/nR)
         return hits/(n_queries)
 
 def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):
@@ -291,7 +282,80 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
             # 1/ for reciprocal!!!
             mean += torch.sum(1/(1+torch.eq(_indices+plus,a).nonzero()[:, 1])).item()
         return mean/(n_queries)
+
+def mrr_Grouped(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+    model.eval() #set for eval
+    with torch.no_grad():
+        plus = torch.tensor([1], dtype=torch.long, device=device)
+        mean = 0.
+        n_queries = len(data)
+        loader = DataLoader(data, batch_size = batch_size)
+        #creating a tensor for comparisons over all entities per batch...
+        comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
+        comp = comp.to(device)
+        collect = dict()
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean reciprocal rank grouped calculation'):
+            q, a = q.to(device), a.to(device)
+            if a.shape[0] != batch_size:
+                #last batch...
+                comp = comp[:a.shape[0]]
+            #calculating scores...
+            scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                mask = mask.to(device)
+                scores = scores + mask
+            a = a.view(-1, 1)
+            #calculating indices for sorting...
+            _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
+            #adding index places... +1 very important for correct positioning!!!
+            # 1/ for reciprocal!!!
+            rrs = (1/(1+torch.eq(_indices+plus,a).nonzero()[:, 1]))
+            for rr, hash in zip(rrs, q.hash):
+                hash = hash.item()
+                if hash in collect:
+                    collect[hash].append(rr.item())
+                else:
+                    collect[hash] = [rr.item()]
+        return sum([sum(collect[hash])/len(collect[hash]) if len(collect[hash])!= 0 else 0 for hash in collect])/(len(collect))
     
+def mean_rank_grouped(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+    model.eval() #set for eval
+    with torch.no_grad():
+        plus = torch.tensor([1], dtype=torch.long, device=device)
+        mean = 0.
+        n_queries = len(data)
+        loader = DataLoader(data, batch_size = batch_size)
+        #creating a tensor for comparisons over all entities per batch...
+        comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
+        comp = comp.to(device)
+        collect = dict()
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean rank calculation'):
+            q, a = q.to(device), a.to(device)
+            if a.shape[0] != batch_size:
+                #last batch...
+                comp = comp[:a.shape[0]]
+            #calculating scores...
+            scores = model.evaluate(q, comp, unsqueeze=True) #unsqueeze for shape
+            #applying filter if given
+            if filter:
+                mask = filter.mask(q, a)
+                mask = mask.to(device)
+                scores = scores + mask
+            a = a.view(-1, 1)
+            #calculating indices for sorting...
+            _, _indices = torch.sort(scores, dim = 1, descending=True) #! changed: scores goes big!
+            #adding index places... +1 very important for correct positioning!!!
+            ranks = (1+torch.eq(_indices+plus,a).nonzero()[:, 1])
+            for rank, hash in zip(ranks, q.hash):
+                hash = hash.item()
+                if hash in collect:
+                    collect[hash].append(rank.item())
+                else:
+                    collect[hash] = [rank.item()]
+        return sum([sum(collect[hash])/len(collect[hash]) if len(collect[hash])!= 0 else 0 for hash in collect])/(len(collect))
+
 #! NEEDS FIXING (NEXT NEXT GIT PUSH)
 def NDCG(train: Dataset, val: Dataset, test: Dataset, model: torch.nn.Module)->float:
     '''

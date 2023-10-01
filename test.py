@@ -120,6 +120,11 @@ for i, test_file in enumerate(test_data):
             "result": result1,
             "N": None,
         }
+        result6 = mean_rank_grouped(test, model, batch_size = batch_size, filter=filter, device=DEVICE)
+        logs[test_file]["mean_rank_grouped"] = {
+            "result": result6,
+            "N": None,
+        }
     result2 = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
     logs[test_file]["hits@"] = {
         "result": result2,
@@ -134,6 +139,11 @@ for i, test_file in enumerate(test_data):
         result4 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
         logs[test_file]["mrr"] = {
             "result": result4,
+            "N": None,
+        }
+        result5 = mrr_Grouped(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
+        logs[test_file]["mrrGrouped"] = {
+            "result": result5,
             "N": None,
         }
     print(f"Finished {test_file}")

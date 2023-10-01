@@ -10,14 +10,15 @@ import torch.nn.functional as F
 
 class Model(qa_embedder): 
     def __init__(self, num_entities, num_relationships, num_bases = None, num_blocks = None,
-                kernel = "rgcn", T = 0., aggregation = "sum", dynamic = False,
+                kernel = "rgcn", T = 0., T_emb=0.25, aggregation = "sum", dynamic = False,
                 emb_dim = 50, conv_dims=[100],linear_dims=[50], heads = 1, p=0.2, margin = 1.0):
-        super().__init__(num_entities, emb_dim)
+        super().__init__(num_entities, emb_dim, T_emb=T_emb)
         self.num_entities = num_entities
         self.num_relationships = num_relationships
         self.kwargs = {
             'kernel': kernel,
             'T': T,
+            'T_emb': T_emb,
             'aggregation': aggregation,
             'dynamic': dynamic,
             'emb_dim': emb_dim,
