@@ -62,16 +62,18 @@ def query2graph(query: list)->Data:
     #* Return Data...
     # with hash
     q_hash = hashQuery(query)
-    # # structure
-    # q_struct = structure(query)
-    # # depth
-    # q_depth = DEPTH_DICT[q_struct]
+    # structure
+    q_struct = structure(query)
+    # depth
+    q_depth = DEPTH_DICT[q_struct]
 
     return Data(
         x=x, 
         edge_index=edge_index, 
         edge_attr=edge_attr,
-        hash=q_hash
+        hash=q_hash,
+        structure=q_struct, 
+        depth=q_depth
     )
 
 class qa_dataset(Dataset):
@@ -82,23 +84,27 @@ class qa_dataset(Dataset):
     def __init__(self, query_path: str):
         super().__init__()
         self.query_path = query_path
-        self.qas = self.extract_qas()
+        self.qas, self.unique_graphs = self.extract_qas()
     def len(self) -> int:
         return len(self.qas)
     def __getitem__(self, idx):
         return self.get(idx)  # type: ignore
     def get(self, idx):
-        return self.qas[idx]
+        qid, answer = self.qas[idx]
+        return (self.unique_graphs[qid], answer)
     def extract_qas(self)->list:
         qas = []
+        unique_graphs = dict()
         print('Extracting qa data...')
         with open(self.query_path, 'r') as f:
-            for line in f:
+            for i, line in enumerate(f):
                 q, ans = ast.literal_eval(line) #get query and total answers
+                q = query2graph(q)
+                unique_graphs[i] = q
                 for a in ans:
-                    qas.append((query2graph(q), a))
+                    qas.append((i, a))
         print('Done!')
-        return qas
+        return qas, unique_graphs
 
 class connections():
     '''
