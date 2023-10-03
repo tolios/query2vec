@@ -1,6 +1,5 @@
 from metrics import Filter
 import argparse
-from graph import qa_dataset
 import pickle
 
 #parser for all arguments!
@@ -23,6 +22,8 @@ if args.save_val:
     dict_ = Filter._create_train_dict(args.train)
     with open(args.save_val, "wb") as f:
         pickle.dump(dict_, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+del dict_
 
 print("Creating filter for test using train and val ...")
 dict_ = Filter._create_stable_dict(args.train, args.valid)

@@ -61,13 +61,14 @@ class Filter:
         '''
         print("compiling mask...")
         masks = dict()
-        for q_hash, ans in Filter._load(test):
+        mask = torch.arange(1, 1+self.n_entities)
+        for q_hash, _ in Filter._load(test):
             #extract all answers
             as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
             as_ = as_.union(self.test_dict.get(q_hash))
-            for a_ in ans:
-                #remove given entity
-                masks[(q_hash, a_)] = list(as_ - {a_})
+            as_ = torch.Tensor(list(as_))
+            mask_ = torch.eq(mask,as_.unsqueeze(1)).any(0)
+            masks[q_hash] = mask_
             # stack for batching...
         print("Mask compiled!")
         return masks
@@ -85,12 +86,10 @@ class Filter:
         a = a.tolist()
         #batch mask list
         batch_mask = []
-        mask = torch.arange(1, 1+self.n_entities)
         for q_hash, a_ in zip(q_hashes, a):
             #add to batch mask
-            as_ = torch.Tensor(self.masks[(q_hash, a_)])
-            #finds the location where each entity is located! (marks as True)
-            mask_ = torch.eq(mask,as_.unsqueeze(1)).any(0)
+            mask_ = self.masks[q_hash]
+            mask_[a_-1] = 0 # set correct to zero
             mask_ = -self.big*mask_
             batch_mask.append(mask_)
         # stack for batching...
@@ -99,6 +98,7 @@ class Filter:
     def change_test(self, test):
         # this method is used when consecutive test runs happen!
         #changes test dict!
+        del self.test_dict, self.masks
         self.test_dict = self._create_test_dict(test)
         self.masks = self.compile_mask(test)
 
@@ -144,7 +144,7 @@ class Filter:
     def _load(path):
         # yield
         with open(path, 'r') as f:
-            for line in f:
+            for line in tqdm(f):
                 q, ans = ast.literal_eval(line)
                 h = hashQuery(q)
                 yield (h, ans)

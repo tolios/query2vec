@@ -57,7 +57,8 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            #corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
@@ -77,7 +78,8 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+            #corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate validation scores!!!
             #calculate loss...
@@ -128,7 +130,8 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
-            corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+            #corrupted = filter.negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
             corrupted = corrupted.to(device)
             #calculate loss...
             loss, score, corr_score = model(batch, answers, corrupted)
@@ -155,7 +158,8 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
                 batch, answers = qa_batch
                 batch, answers = batch.to(device), answers.to(device)
                 #get corrupted triples
-                corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
+                corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
+                #corrupted = filter.test_negatives(batch.hash, model.num_entities, num_negs=num_negs, start = 1)
                 corrupted = corrupted.to(device)
                 #calculate validation scores!!!
                 #calculate loss...
