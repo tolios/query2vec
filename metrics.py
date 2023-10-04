@@ -61,14 +61,14 @@ class Filter:
         '''
         print("compiling mask...")
         masks = dict()
-        mask = torch.arange(1, 1+self.n_entities)
         for q_hash, _ in Filter._load(test):
+            mask = torch.zeros(self.n_entities)
             #extract all answers
             as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
             as_ = as_.union(self.test_dict.get(q_hash))
-            as_ = torch.Tensor(list(as_))
-            mask_ = torch.eq(mask,as_.unsqueeze(1)).any(0)
-            masks[q_hash] = mask_
+            as_ = (torch.Tensor(list(as_))-1).tolist()
+            mask[as_] = 1
+            masks[q_hash] = mask
             # stack for batching...
         print("Mask compiled!")
         return masks
@@ -89,8 +89,8 @@ class Filter:
         for q_hash, a_ in zip(q_hashes, a):
             #add to batch mask
             mask_ = self.masks[q_hash]
-            mask_[a_-1] = 0 # set correct to zero
             mask_ = -self.big*mask_
+            mask_[a_-1] = 0 # set correct to zero
             batch_mask.append(mask_)
         # stack for batching...
         return torch.stack(batch_mask, dim=0)

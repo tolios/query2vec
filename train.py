@@ -88,7 +88,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             running_val_loss += loss.sum().data.item()
             running_val_score += score.sum().data.item()
             running_val_corr_score += corr_score.sum().data.item()
-        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device)
     #print results...
     print('Epoch: ', epoch_stop, ',loss:', "{:.4f}".format(running_loss/(len(train))),
         ",val loss:", "{:.4f}".format(running_val_loss/(len(val))),
@@ -170,7 +170,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
                 running_val_corr_score += corr_score.sum().data.item()
             
             if epoch % val_every == 0:
-                hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device,disable=True)
+                hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device)
                 # will make lr smaller if hitsATN doesn't improve
                 scheduler.step(hitsATN*100)
 

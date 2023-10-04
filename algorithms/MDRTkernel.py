@@ -104,7 +104,7 @@ class Model(qa_embedder):
         elif self.aggregation == "mean":
             return scatter_mean(x, batch_id, dim=0)
         elif self.aggregation == "max":
-            return scatter_max(x, batch_id, dim=0)
+            return scatter_max(x, batch_id, dim=0)[0]
         elif self.aggregation == "root":
             return root_embs(x, edge_index, batch_id)
         else:
