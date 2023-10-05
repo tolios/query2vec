@@ -85,11 +85,6 @@ set_experiment(config["experiment"])
 #directory where qas are stored...
 id_dir=os.path.dirname(TRAIN_PATH)
 
-#data
-#training
-train_qa = qa_dataset(TRAIN_PATH)
-val_qa = qa_dataset(VAL_PATH)
-
 if pretrained:
     #load model!    
     #pretrained should end in .../
@@ -110,10 +105,16 @@ else:
     optimizer_dict = {}
     scheduler_dict = {}
 
+
 if args.val_filter:
-    filter = Filter(None, None, VAL_PATH, model.num_entities, load_path=args.val_filter)
+    filter = Filter(None, None, VAL_PATH, model.num_entities, load_path=args.val_filter, delete=True)
 else:
     filter = None
+
+#data
+#training
+train_qa = qa_dataset(TRAIN_PATH)
+val_qa = qa_dataset(VAL_PATH)
 
 #training begins...
 with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as run:

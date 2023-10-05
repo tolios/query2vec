@@ -3,7 +3,6 @@ from torch_geometric.data import Dataset, Batch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 import pickle
-import random
 import ast
 from form import hashQuery
 
@@ -12,7 +11,7 @@ class Filter:
     This class receives train, val and test qa data so as to create a filter function!
     '''
     def __init__(self, train, val, test, 
-            n_entities: int, big: int = 10e5, load_path = False):
+            n_entities: int, big: int = 10e5, load_path = False, delete = False):
         if not load_path:
             self.n_entities = n_entities
             self.stable_dict = self._create_stable_dict(train, val)
@@ -26,34 +25,8 @@ class Filter:
             self.test_dict = self._create_test_dict(test)
 
         self.masks = self.compile_mask(test)
-    
-    def negatives(self, q_hashes, num_entities, num_negs=1, start = 1):
-        # works for batch of q_hashes
-        ks = []
-        for h in q_hashes:
-            k = []
-            ans = self.stable_dict[h.item()]
-            while len(k) < num_negs:
-                i = random.randint(start, num_entities)
-                if not (i in ans):
-                    k.append(i)
-            ks.append(k)
-        
-        return torch.Tensor(ks).type(torch.int32)
-    
-    def test_negatives(self, q_hashes, num_entities, num_negs=1, start = 1):
-        # works for batch of q_hashes
-        ks = []
-        for h in q_hashes:
-            k = []
-            ans = self.test_dict[h.item()]
-            while len(k) < num_negs:
-                i = random.randint(start, num_entities)
-                if not (i in ans):
-                    k.append(i)
-            ks.append(k)
-        
-        return torch.Tensor(ks).type(torch.int32)
+        if delete:
+            del self.stable_dict, self.test_dict
 
     def compile_mask(self, test):
         '''
@@ -62,13 +35,10 @@ class Filter:
         print("compiling mask...")
         masks = dict()
         for q_hash, _ in Filter._load(test):
-            mask = torch.zeros(self.n_entities)
             #extract all answers
             as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
             as_ = as_.union(self.test_dict.get(q_hash))
-            as_ = (torch.Tensor(list(as_))-1).tolist()
-            mask[as_] = 1
-            masks[q_hash] = mask
+            masks[q_hash] = [i-1 for i in as_]
             # stack for batching...
         print("Mask compiled!")
         return masks
@@ -86,9 +56,11 @@ class Filter:
         a = a.tolist()
         #batch mask list
         batch_mask = []
-        for q_hash, a_ in zip(q_hashes, a):
+        masks_ = torch.zeros(len(a), self.n_entities)
+        for mask_, q_hash, a_ in zip(masks_, q_hashes, a):
             #add to batch mask
-            mask_ = self.masks[q_hash]
+            as_ = self.masks[q_hash]
+            mask_[as_] = 1
             mask_ = -self.big*mask_
             mask_[a_-1] = 0 # set correct to zero
             batch_mask.append(mask_)

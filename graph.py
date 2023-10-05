@@ -344,6 +344,10 @@ class connections():
             h = variables[h] if h in variables else h
             t = variables[t] if t in variables else t
             true_query.append([h, r, t])
+        
+        #check if it has degenerate join -r->n-r^-1->
+        if connections.detect_inverse_degenerate(true_query):
+            return [], uniques
 
         # find structure
         q_struct = structure(true_query)
@@ -511,6 +515,34 @@ class connections():
                 result.add((v, in_other))
         
         return result
+
+    @staticmethod
+    def detect_inverse_degenerate(query: list):
+        # detect -r->n-r^-1-> connections to throw out!
+        # extract tail, head with relation connections
+        h2r = dict()
+        t2r = dict()
+        for h, r, t in query:
+            if not isinstance(h, int):
+                if not (h in h2r):
+                    h2r[h] = []
+                h2r[h].append(r)
+            if not (t in t2r):
+                t2r[t] = []
+            t2r[t].append(r)
+            
+        for node in h2r:
+            hrs = h2r[node]
+            trs = t2r[node]
+
+            for hr in hrs:
+                for tr in trs:
+                    # detect inverse join with regular using node
+                    if hr % 2 == 0 and tr % 2 == 1 and (tr - hr == 1):
+                        return True
+                    if tr % 2 == 0 and hr % 2 == 1 and (hr - tr == 1):
+                        return True
+        return False
 
 
 
