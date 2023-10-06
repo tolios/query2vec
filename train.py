@@ -3,11 +3,11 @@ import os
 import torch
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
-from torch.optim import Adagrad, AdamW, Adam, SGD
+from torch.optim import AdamW
 from graph import *
 from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
-from metrics import hits_at_N_Grouped, hits_at_N
+from metrics import hits_at_N
 
 def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     train: Dataset, val: Dataset,

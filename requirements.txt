@@ -1,0 +1,9 @@
+torch
+torch-scatter
+torch-sparse
+torch-cluster
+torch-spline-conv
+torch-geometric
+mlflow
+tqdm
+numpy
