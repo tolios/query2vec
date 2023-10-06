@@ -2,8 +2,7 @@ import subprocess
 import sys
 
 dataset = sys.argv[1]
-filter_path = sys.argv[2]
-id_list = sys.argv[3:]
+id_list = sys.argv[2:]
 
 print(f"Starting execution of tests ...")
 print("--------------------------------------------------------------------------------------------------------------")
@@ -19,8 +18,7 @@ for id in id_list:
         id, f"tests_full.yml", "--N=3", "--filtering=true",
         "--tests="+f"{string_list}",
         f"--train_data={dataset}/train_qa_1.txt", 
-        f"--val_data={dataset}/val_qa_1.txt", 
-        f"--filter_path={filter_path}",
+        f"--val_data={dataset}/val_qa_1.txt",
         "--all_tests"]
     
     exit_code = subprocess.call(command)

@@ -8,7 +8,7 @@ if sys.argv[1] == "-f" or sys.argv[1] == "--folder":
     run_folder = sys.argv[2]
     # Extract the absolute path
     run_folder = os.path.abspath(run_folder)
-    dir_list = os.listdir(run_folder)
+    dir_list = sorted([i for i in os.listdir(run_folder) if i[:4] == "run_"]) #demands runs inside folder are named as run_*
     if len(sys.argv) > 3:
         extra = sys.argv[3:]
     else:

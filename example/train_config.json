@@ -1,0 +1,22 @@
+{   
+    "experiment": "query2vec_init",
+    "experiment_id": null,
+    "run": "qa_example",
+    "config": {
+        "seed": 42,
+        "train_data": "./datasets/FB15k_237/qa_example/train_qa_1.txt",
+        "val_data": "./datasets/FB15k_237/qa_example/val_qa_1.txt",
+        "epochs": 20,
+        "train_batch_size": 256,
+        "val_batch_size": 256,
+        "num_negs": 50,
+        "lr": 0.0001,
+        "wd": 0.000001,
+        "patience": 5,
+        "val_every": 5,
+        "scheduler_patience": 4,
+        "scheduler_factor": 0.1,
+        "scheduler_threshold": 0.1,
+        "pretrained": null
+    }
+}

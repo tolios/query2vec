@@ -33,8 +33,8 @@ parser.add_argument("json_config",
 parser.add_argument("json_model",
                     type=str, help="Model architecture json file...")
 parser.add_argument("--val_filter",
-                    type=str,
-                    default="", help="val filter path")
+                    type=bool,
+                    default=True, help="val filter path")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -107,7 +107,9 @@ else:
 
 
 if args.val_filter:
-    filter = Filter(None, None, VAL_PATH, model.num_entities, load_path=args.val_filter, delete=True)
+    filter_path = os.path.join(id_dir, "val_filter.pkl")
+    filter = Filter(None, None, VAL_PATH, model.num_entities, load_path=filter_path, delete=True)
+
 else:
     filter = None
 

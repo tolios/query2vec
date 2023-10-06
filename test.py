@@ -45,8 +45,8 @@ parser.add_argument("--seed",
                     default=42,
                     type=int, help="Seed for randomness")
 parser.add_argument("--filter_path",
-                    default="",
-                    type=str, help="Precomputed filter path. File is pickled...")
+                    default=True,
+                    type=bool, help="Precomputed filter path. File is pickled...")
 parser.add_argument("--all_tests",
                     action=argparse.BooleanOptionalAction,
                     help="Calculate also mean_rank and mrr tests!")
@@ -75,10 +75,6 @@ if filtering:
     if not (args.train_data and args.val_data):
         print("train data and val data REQUIRED when filtering!!!")
         raise 
-    
-    # if not args.filter_path:
-    #     train = qa_dataset(args.train_data)
-    #     val = qa_dataset(args.val_data)
 
     #directory where qas are stored...
     id_dir=os.path.dirname(args.train_data)
@@ -87,6 +83,8 @@ if filtering:
         info = json.load(file)
 
     num_entities = info["num_entities"]
+
+    filter_path = os.path.join(os.path.dirname(args.train_data), "filter.pkl")
 
 else:
     filter = None
@@ -101,7 +99,7 @@ for i, test_file in enumerate(test_data):
         if i == 0:
             if args.filter_path:
                 print("Loading filter")
-                filter = Filter(None, None, test_file, num_entities, big=args.big, load_path=args.filter_path)
+                filter = Filter(None, None, test_file, num_entities, big=args.big, load_path=filter_path)
                 print("filter loaded!")
             else:
                 print("creating filter...")

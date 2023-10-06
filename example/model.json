@@ -1,0 +1,18 @@
+{
+    "model_type": "MDRTkernel",
+    "model_params": {
+        "kernel": "rgcn",
+        "T": 0.1,
+        "T_emb": 0.25,
+        "aggregation": "sum",
+        "dynamic": false,
+        "conv_dims" : [50, 50, 50],
+        "num_bases" : null,
+        "num_blocks" : null,
+        "linear_dims": [],
+        "heads": 1,
+        "emb_dim": 50,
+        "p": 0.2,
+        "margin": 1.0
+    }
+}

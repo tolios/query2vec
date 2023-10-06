@@ -240,10 +240,13 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         else:
             epoch_stop = epochs
     ## If checkpoint exists, delete it ##
-    if os.path.isfile("./temp/checkpoint.pt"):
-        os.remove("./temp/checkpoint.pt")
-        os.remove("./temp/optimizer.pt")
-        os.remove("./temp/scheduler.pt")
+    if os.path.exists("./temp"):
+        if os.path.isfile("./temp/checkpoint.pt"):
+            os.remove("./temp/checkpoint.pt")
+        if os.path.isfile("./temp/optimizer.pt"):
+            os.remove("./temp/optimizer.pt")
+        if os.path.isfile("./temp/scheduler.pt"):
+            os.remove("./temp/scheduler.pt")
         os.rmdir("./temp")
 
     print('Training ends ...')
