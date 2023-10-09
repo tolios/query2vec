@@ -53,7 +53,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         #calculate training losses...
         q_norms = 0
         a_norms = 0
-        for qa_batch in train_loader:
+        for qa_batch in tqdm(train_loader, desc=f"Epoch (train) 0"):
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
             #get corrupted triples
@@ -73,7 +73,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
             a_norms += a_embs.norm(p=2, dim = -1).sum().item()
         print("q_norms:", q_norms/len(train), "a_norms:", a_norms/len(train))
         #calculate val loss...
-        for qa_batch in val_loader:
+        for qa_batch in tqdm(val_loader, desc=f"Epoch (val) 0"):
             #questions and answers!
             batch, answers = qa_batch
             batch, answers = batch.to(device), answers.to(device)
@@ -124,7 +124,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         q_norms = 0
         a_norms = 0
 
-        for qa_batch in train_loader:
+        for qa_batch in tqdm(train_loader, desc=f"Training epoch {epoch}"):
             #zero out gradients...
             optimizer.zero_grad()
             batch, answers = qa_batch
@@ -153,7 +153,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
         #calculating val energy....
         model.eval()
         with torch.no_grad():
-            for qa_batch in val_loader:
+            for qa_batch in tqdm(val_loader, desc=f"Validating epoch {epoch}"):
                 #questions and answers!
                 batch, answers = qa_batch
                 batch, answers = batch.to(device), answers.to(device)
