@@ -3,6 +3,7 @@ import sys
 import os
 from time import time
 import json
+import glob
 
 if sys.argv[1] == "-f" or sys.argv[1] == "--folder":
     run_folder = sys.argv[2]
@@ -63,9 +64,12 @@ for i, dir in enumerate(dir_list):
 
         print("**************************************************************************************************************")
         string_list = []
-        for test in range(1, 8): # NOTE - make the other tests for all the good models
-            if os.path.exists(f"{dataset}/test_qa_{test}.txt"):
-                string_list.append(f"{dataset}/test_qa_{test}.txt")
+        pattern = f"{dataset}/test_qa_*.txt"
+        # Use glob to find all files matching the pattern and count them
+        number_of_files = len(glob.glob(pattern))
+
+        for test in range(1, number_of_files + 1): # NOTE - make the other tests for all the good models
+            string_list.append(f"{dataset}/test_qa_{test}.txt")
 
         command = ["python", f"./query2vec/test.py",
             id, f"tests.yml", "--N=3", "--filtering=true",
