@@ -121,7 +121,7 @@ class Filter:
                 h = hashQuery(q)
                 yield (h, ans)
 
-def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 128, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -150,7 +150,7 @@ def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Fi
             mean += torch.sum(1+torch.eq(_indices+plus,a).nonzero()[:, 1]).item()
         return mean/(n_queries)
 
-def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):
+def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 128, filter: Filter = None, device=torch.device('cpu'), disable=False):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -186,7 +186,7 @@ def hits_at_N(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, fi
         # return total hits over n_queries!
         return hits/(n_queries)
 
-def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 64, filter: Filter = None, device=torch.device('cpu'), disable=False):
+def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size = 128, filter: Filter = None, device=torch.device('cpu'), disable=False):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -225,7 +225,7 @@ def hits_at_N_Grouped(data: Dataset, model: torch.nn.Module, N = 10, batch_size 
         #return total hits over n_queries!
         return sum([sum(collect[hash])/len(collect[hash]) if len(collect[hash])!= 0 else 0 for hash in collect])/(len(collect))
 
-def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 128, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -255,7 +255,7 @@ def mean_reciprocal_rank(data: Dataset, model: torch.nn.Module, batch_size = 64,
             mean += torch.sum(1/(1+torch.eq(_indices+plus,a).nonzero()[:, 1])).item()
         return mean/(n_queries)
 
-def mrr_Grouped(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def mrr_Grouped(data: Dataset, model: torch.nn.Module, batch_size = 128, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
@@ -292,7 +292,7 @@ def mrr_Grouped(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: 
                     collect[hash] = [rr.item()]
         return sum([sum(collect[hash])/len(collect[hash]) if len(collect[hash])!= 0 else 0 for hash in collect])/(len(collect))
     
-def mean_rank_grouped(data: Dataset, model: torch.nn.Module, batch_size = 64, filter: Filter = None, device=torch.device('cpu')):
+def mean_rank_grouped(data: Dataset, model: torch.nn.Module, batch_size = 128, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval
     with torch.no_grad():
         plus = torch.tensor([1], dtype=torch.long, device=device)
