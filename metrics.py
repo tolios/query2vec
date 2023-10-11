@@ -303,7 +303,7 @@ def mean_rank_grouped(data: Dataset, model: torch.nn.Module, batch_size = 128, f
         comp = torch.arange(1, model.num_entities + 1).expand(batch_size, -1)
         comp = comp.to(device)
         collect = dict()
-        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean rank calculation'):
+        for q, a in tqdm(loader, desc=f'{"Filtered" if filter else "Raw"} mean rank grouped calculation'):
             q, a = q.to(device), a.to(device)
             if a.shape[0] != batch_size:
                 #last batch...

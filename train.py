@@ -7,7 +7,7 @@ from torch.optim import AdamW
 from graph import *
 from utils import save_checkpoint, load_checkpoint
 from mlflow import log_metrics
-from metrics import hits_at_N
+from metrics import hits_at_N_Grouped
 
 def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     train: Dataset, val: Dataset,
@@ -40,64 +40,6 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     highest_val_hitsAt3 = -0.1
     stop_counter = 1
     epoch_stop = 0 #keeps track of last epoch of checkpoint...
-    #get init scores!!!
-    print("Starting evaluation scores:")
-    model.eval()
-    with torch.no_grad():
-        running_loss = 0.0
-        running_score = 0.0
-        running_corr_score = 0.0
-        running_val_score = 0.0
-        running_val_loss = 0.0
-        running_val_corr_score = 0.0
-        #calculate training losses...
-        for qa_batch in tqdm(train_loader, desc=f"Epoch (train) 0"):
-            batch, answers = qa_batch
-            batch, answers = batch.to(device), answers.to(device)
-            #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
-            corrupted = corrupted.to(device)
-            #calculate loss...
-            loss, score, corr_score = model(batch, answers, corrupted)
-            #getting losses...
-            running_loss += loss.sum().data.item()
-            running_score += score.sum().data.item()
-            running_corr_score += corr_score.sum().data.item()
-        #calculate val loss...
-        for qa_batch in val_loader:
-            #questions and answers!
-            batch, answers = qa_batch
-            batch, answers = batch.to(device), answers.to(device)
-            #get corrupted triples
-            corrupted = corrupted_answer(model.num_entities, answers.size(), num_negs=num_negs, start = 1)
-            corrupted = corrupted.to(device)
-            #calculate validation scores!!!
-            #calculate loss...
-            loss, score, corr_score = model(batch, answers, corrupted)
-            #getting losses...
-            running_val_loss += loss.sum().data.item()
-            running_val_score += score.sum().data.item()
-            running_val_corr_score += corr_score.sum().data.item()
-        hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device)
-    #print results...
-    print('Epoch: ', epoch_stop, ',loss:', "{:.4f}".format(running_loss/(len(train))),
-        ",val loss:", "{:.4f}".format(running_val_loss/(len(val))),
-        ',score:', "{:.4f}".format(running_score/(len(train))),
-        ',val score:', "{:.4f}".format(running_val_score/(len(val))),
-        ',corr score:', "{:.4f}".format(running_corr_score/(len(train))),
-        ',val corr:', "{:.4f}".format(running_val_corr_score/(len(val))),
-        ',val hits@3:', "{:.2f}".format(hitsATN*100),
-        ',time:', "starting...")
-    #get metrics
-    log_metrics({
-        "loss": running_loss/(len(train)),
-        "val loss": running_val_loss/(len(val)),
-        "golden score": running_score/(len(train)),
-        "val score": running_val_score/(len(val)),
-        "corr score": running_corr_score/(len(train)),
-        "val corr": running_val_corr_score/(len(val)),
-        "hitsAt3": hitsATN*100,
-        }, 0)
     #make temp dir
     os.makedirs("./temp")
     #training ...
@@ -147,7 +89,7 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
                 running_val_corr_score += corr_score.sum().data.item()
             
             if epoch % val_every == 0:
-                hitsATN = hits_at_N(val, model, N=3, filter=filter, device=device)
+                hitsATN = hits_at_N_Grouped(val, model, N=3, filter=filter, device=device)
                 # will make lr smaller if hitsATN doesn't improve
                 scheduler.step(hitsATN*100)
 
