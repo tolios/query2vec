@@ -50,6 +50,9 @@ parser.add_argument("--filter_path",
 parser.add_argument("--all_tests",
                     action=argparse.BooleanOptionalAction,
                     help="Calculate also mean_rank and mrr tests!")
+parser.add_argument("--all_scaled",
+                    action=argparse.BooleanOptionalAction,
+                    help="Calculate only mrrGrouped and hits@NGrouped")
 
 #finds all arguments...
 args = parser.parse_args()
@@ -123,22 +126,25 @@ for i, test_file in enumerate(test_data):
             "result": result6,
             "N": None,
         }
-    result2 = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
-    logs[test_file]["hits@"] = {
-        "result": result2,
-        "N": N,
-    }
+    if not args.all_scaled:
+        result2 = hits_at_N(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
+        logs[test_file]["hits@"] = {
+            "result": result2,
+            "N": N,
+        }
     result3 = hits_at_N_Grouped(test, model, N=N, batch_size = batch_size, filter=filter, device=DEVICE)*100
     logs[test_file]["hitsGrouped@"] = {
         "result": result3,
         "N": N,
     }
-    if args.all_tests:
-        result4 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
-        logs[test_file]["mrr"] = {
-            "result": result4,
-            "N": None,
-        }
+    if args.all_tests or args.all_scaled:
+        if not args.all_scaled:
+            result4 = mean_reciprocal_rank(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
+            logs[test_file]["mrr"] = {
+                "result": result4,
+                "N": None,
+            }
+        
         result5 = mrr_Grouped(test, model, batch_size = batch_size, filter=filter, device=DEVICE)*100
         logs[test_file]["mrrGrouped"] = {
             "result": result5,

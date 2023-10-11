@@ -40,18 +40,19 @@ python ./query2vec/create_filter.py $test_filter $train_ds $val_ds $val_filter
 
 Then to run an experiment, one can simply prepare a model.json and train_config.json (example can be found in the example folder) and simply run:
 
-```[shell]
-python ./query2vec/run.py ./query2vec/example --all_tests
-```
+Attention: Now only run grouped hits@ and mrr (all together take too long).
+The flag "--all_scaled" does this...
 
-The "--all_tests flag is used for testing all metrics!"
+```[shell]
+python ./query2vec/run.py ./query2vec/example --all_scaled
+```
 
 Also, if one can prepare multiple runs, by preparing a folder (runs) that contains folders of model.json and train_config.json
 
 To run them all:
 
 ```[shell]
-python ./query2vec/run.py -f ./runs --all_tests
+python ./query2vec/run.py -f ./runs --all_scaled
 ```
 
 To monitor the experiments, one can use mlflow command (in the location where mlruns is located):
