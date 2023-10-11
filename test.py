@@ -39,7 +39,7 @@ parser.add_argument("--big",
                     default='10e5',
                     type=float, help="Value of mask, so as to filter out golden triples")
 parser.add_argument("--batch_size",
-                    default=64,
+                    default=128,
                     type=int, help="Test batch size")
 parser.add_argument("--seed",
                     default=42,
