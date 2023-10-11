@@ -281,10 +281,11 @@ class connections():
     def sample_qa(self, 
         num_edges: int = 2, other: connections|None = None, 
         uniques: set = set(), structures = ["2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"])->tuple:
-        #*  Samples a query (as a dag) and answer, with number of edges as num_edges.
-        #* Sometimes, it fails and produces a rejected query, so it outputs ([], answer).
+        #*  Samples a query (as a dag) and answer, with number of edges as num_edges, as well as its answers
+        #* Sometimes, it fails and produces a rejected query, so it outputs ([], [], uniques).
 
         query = []
+        answers = []
         known_link = set()
         #pick a start!
         t = self.random_answer()
@@ -299,10 +300,10 @@ class connections():
             #rejections...
             if h == t:
                 #self loops are killed on the spot...
-                return [], uniques
+                return [], answers, uniques
             if (h, r, t) in known_link:
                 #since it generated the same link twice, simply reject... (guarrantees n edges)
-                return [], uniques
+                return [], answers, uniques
             else:
                 known_link.add((h, r, t))
             if h in variables:
@@ -312,7 +313,7 @@ class connections():
                 #must order_h > order_t, else cycle!!!
                 if order_h <= order_t:
                     #cycle, therefore reject...
-                    return [], uniques
+                    return [], answers, uniques
             #name new variable for each new entity as tail!
             if t not in variables:
                 vars += 1
@@ -333,10 +334,10 @@ class connections():
             if t not in self._2relationships:
                 #if we do have enough, keep. Else reject!
                 if len(query) != num_edges:
-                    return [], uniques
+                    return [], answers, uniques
         #check if query contains one of the required links, else return malformed...
         if not has_required:
-            return [], uniques
+            return [], answers, uniques
         #Replace with variables!
         true_query = []
         for link in query:
@@ -347,24 +348,29 @@ class connections():
         
         #check if it has degenerate join -r->n-r^-1->
         if connections.detect_inverse_degenerate(true_query):
-            return [], uniques
+            return [], answers, uniques
 
         # find structure
         q_struct = structure(true_query)
 
         if not (q_struct in structures):
-            return [], uniques
+            return [], answers, uniques
 
         # find if unique query
         q_hash = hashQuery(true_query)
 
         # unique representation...
         if q_hash in uniques:
-            return [], uniques # rejected because query has been sampled already!
+            return [], answers, uniques # rejected because query has been sampled already!
         else:
+            # first generate all answers!
+            answers = self.get_answers_from_query(true_query, other=other)
+            if not answers:
+                # a highly unlikely case where train, val, test might have common answers for a question (so the filter works for all the produced answers for other)
+                return [], answers, uniques
             uniques.add(q_hash)
 
-        return true_query, uniques
+        return true_query, answers, uniques
 
     def generate_1hops(self):
         #* This method yields all 1 hop queries and their answers!
@@ -420,13 +426,11 @@ class connections():
                         tries = 1 #used for a cuttoff if the program takes too long?!
                         pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                         while len(uniques) < num_queries and tries < tot_tries:
-                            #generate query...
-                            q, uniques = self.sample_qa(num_edges=num_edges, 
+                            #generate query and answers while updating uniques
+                            q, ans, uniques = self.sample_qa(num_edges=num_edges, 
                                                 other=other, uniques=uniques, structures=structure)
                             #write (q, a) if q non empty
                             if q:
-                                # get all answers!
-                                ans = self.get_answers_from_query(q, other=other)
                                 f.write(str((q, ans))+'\n')
                                 pbar.update(1)
                             else:
@@ -479,26 +483,25 @@ class connections():
                         new_query.append([h, r, t]) #keep for next round
             query = new_query
         
-        # get only "_1" (., true) answers if we have an other!
-        return [i for i, in_other in variables["_1"] if (in_other or (not other))]
+        # keep only answers with base info...
+        not_other = {i for i, in_other in variables["_1"] if not in_other}
+
+        if other:
+            # impressively we need to filter out the possibility that an answer is produced
+            # both by other and without!!!
+            return list({i for i, in_other in variables["_1"] if in_other} - not_other)
+        else:
+            return list(not_other)
     
     def get_tails_from_vars(self, hs, r, other: connections|None = None):
-        other_tails = set()
         tails = set()
         for h, in_other in hs:
-            if other:
-                other_tails = other_tails | {(i, True) for i in other._2tails.get((h, r), set())} #set true, since from other
-            tails = tails | {(i, in_other) for i in self._2tails.get((h, r), set())}
-        return tails | other_tails
+            tails = tails | {(i, False if not other else (other.__contains__((h, r, i)) or in_other)) for i in self._2tails.get((h, r), set())}
+        return tails
     
     def get_tails_from_anchor(self, anchor, r,  other: connections|None = None):
-        if other:
-            other_tails = {(i, True) for i in other._2tails.get((anchor, r), set())} #set true, since from other
-        else:
-            other_tails = set()
-        tails = {(i, False) for i in self._2tails.get((anchor, r), set())}
-        return tails | other_tails
-
+        # gets all tails, and adds information if its from other or not...
+        return {(i, False if not other else other.__contains__((anchor, r, i))) for i in self._2tails.get((anchor, r), set())}
 
     @staticmethod
     def intersect_variables(left, right):
