@@ -9,7 +9,7 @@ import importlib
 import inspect
 import warnings
 import json
-from config import DEVICE, URI
+from config import DEVICE, DEVICE_COUNT, URI
 from mlflow import log_params, set_tag, start_run, set_tracking_uri, set_experiment, log_param
 from mlflow.pytorch import log_model, log_state_dict, load_model, load_state_dict
 from mlflow.models.signature import ModelSignature
@@ -127,7 +127,7 @@ with start_run(run_name=config["run"], experiment_id=config["experiment_id"]) as
     log_param("num_entites", model.num_entities)
     log_param("num_relationships", model.num_relationships)
     model, final_epoch, optimizer, scheduler = training(model, optimizer_dict, scheduler_dict, 
-                train_qa, val_qa, device=DEVICE, epochs = EPOCHS,
+                train_qa, val_qa, device=DEVICE, device_count=DEVICE_COUNT, epochs = EPOCHS,
                 batch_size = BATCH_SIZE, val_batch_size = VAL_BATCH_SIZE, num_negs=NUM_NEGS,
                 lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY, patience = PATIENCE, filter=filter, val_every=VAL_EVERY,
                 scheduler_patience = scheduler_patience, scheduler_factor = scheduler_factor, scheduler_threshold = scheduler_threshold)

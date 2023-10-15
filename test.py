@@ -3,8 +3,9 @@ import os
 import json
 from metrics import *
 from graph import qa_dataset
-from config import DEVICE, URI
+from config import DEVICE, DEVICE_COUNT, URI
 from torch_geometric.seed import seed_everything
+from torch_geometric.nn import DataParallel
 from mlflow import set_tracking_uri, log_dict, start_run
 from mlflow.pytorch import load_model
 import ast
@@ -71,7 +72,9 @@ set_tracking_uri(URI) #sets uri for mlflow!
 
 #load model...
 model = load_model(MODEL_URI)
-#put model to device 
+#put model to device(s)...
+if DEVICE_COUNT > 1:
+        model = DataParallel(model)
 model.to(DEVICE)
 
 if filtering:

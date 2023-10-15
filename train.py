@@ -3,6 +3,7 @@ import os
 import torch
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
+from torch_geometric.nn import DataParallel
 from torch.optim import AdamW
 from graph import *
 from utils import save_checkpoint, load_checkpoint
@@ -14,14 +15,16 @@ def training(model: torch.nn.Module, optimizer_dict:dict, scheduler_dict:dict,
     epochs = 50, batch_size = 1024, val_batch_size = 1024, num_negs = 1,
     lr = 0.1, weight_decay = 0.0005, patience = -1, pretrained=False, filter=None, 
     scheduler_patience=3, scheduler_factor=0.1, scheduler_threshold=0.1, val_every=10,
-    device=torch.device('cpu')):
+    device=torch.device('cpu'), device_count=0):
     '''
     Iplementation of training. Receives embedding model, dataset of training and val data!.
     Returns trained model, training losses, Uncorrupted and Corrupted energies.
     '''
     train_loader = DataLoader(train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val, batch_size=val_batch_size, shuffle=True)
-    #put in device...
+    #put in device(s)...
+    if device_count > 1:
+        model = DataParallel(model)
     model.to(device)
     #optimizers
     optimizer = AdamW(model.parameters(), lr = lr, weight_decay = weight_decay) #FIXME - AdamW or something else?
