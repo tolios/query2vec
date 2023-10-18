@@ -34,7 +34,7 @@ class Filter:
         '''
         print("compiling mask...")
         masks = dict()
-        for q_hash, _ in Filter._load(test):
+        for q_hash, _, _ in Filter._load(test):
             #extract all answers
             as_ = self.stable_dict.get(q_hash, set()) # gets set of answers of q_hash in stable, then test and joins
             as_ = as_.union(self.test_dict.get(q_hash))
