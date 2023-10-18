@@ -84,8 +84,8 @@ class Filter:
         #this function creates a dictionary which uses the query hash
         #and contains the set of corresponding answers that exist for train, val
         dict_ = dict()
-        for h, ans in Filter._load(train):
-            dict_[h] = set(ans)
+        for h, ans, rest in Filter._load(train):
+            dict_[h] = set(ans+rest)
         return dict_
 
     @staticmethod
@@ -93,14 +93,14 @@ class Filter:
         #this function creates a dictionary which uses the query hash
         #and contains the set of corresponding answers that exist for train, val
         dict_ = dict()
-        for h, ans in Filter._load(train):
-            dict_[h] = set(ans)
+        for h, ans, rest in Filter._load(train):
+            dict_[h] = set(ans+rest)
 
-        for h, ans in Filter._load(val):
+        for h, ans, rest in Filter._load(val):
             if h not in dict_:
-                dict_[h] = set(ans)
+                dict_[h] = set(ans+rest)
             else:
-                dict_[h] = dict_[h] | set(ans)
+                dict_[h] = dict_[h] | set(ans+rest)
         return dict_
 
     @staticmethod
@@ -108,8 +108,8 @@ class Filter:
         #this function creates a dictionary for test only
         # seperable so it cna be changed!
         dict_ = dict()
-        for h, ans in Filter._load(test):
-            dict_[h] = set(ans)
+        for h, ans, rest in Filter._load(test):
+            dict_[h] = set(ans + rest)
         return dict_
 
     @staticmethod
@@ -117,9 +117,9 @@ class Filter:
         # yield
         with open(path, 'r') as f:
             for line in tqdm(f):
-                q, ans = ast.literal_eval(line)
+                q, ans, rest = ast.literal_eval(line)
                 h = hashQuery(q)
-                yield (h, ans)
+                yield (h, ans, rest)
 
 def mean_rank(data: Dataset, model: torch.nn.Module, batch_size = 128, filter: Filter = None, device=torch.device('cpu')):
     model.eval() #set for eval

@@ -104,7 +104,7 @@ class qa_dataset(Dataset):
         locid = 0
         with open(self.query_path, 'r') as f:
             for i, line in enumerate(f):
-                q, ans = ast.literal_eval(line) #get query and total answers
+                q, ans, _ = ast.literal_eval(line) #get query and total answers
                 qas[i] = (query2graph(q), ans, locid)
                 locid += len(ans)
                 for _ in ans:
@@ -282,7 +282,7 @@ class connections():
         num_edges: int = 2, other: connections|None = None, 
         uniques: set = set(), structures = ["2p", "2i", "3p", "3i", "ip", "pi", "not_implemented"])->tuple:
         #*  Samples a query (as a dag) and answer, with number of edges as num_edges, as well as its answers
-        #* Sometimes, it fails and produces a rejected query, so it outputs ([], [], uniques).
+        #* Sometimes, it fails and produces a rejected query, so it outputs ([], answers, [], uniques).
 
         query = []
         answers = []
@@ -300,10 +300,10 @@ class connections():
             #rejections...
             if h == t:
                 #self loops are killed on the spot...
-                return [], answers, uniques
+                return [], answers, [], uniques
             if (h, r, t) in known_link:
                 #since it generated the same link twice, simply reject... (guarrantees n edges)
-                return [], answers, uniques
+                return [], answers, [], uniques
             else:
                 known_link.add((h, r, t))
             if h in variables:
@@ -313,7 +313,7 @@ class connections():
                 #must order_h > order_t, else cycle!!!
                 if order_h <= order_t:
                     #cycle, therefore reject...
-                    return [], answers, uniques
+                    return [], answers, [], uniques
             #name new variable for each new entity as tail!
             if t not in variables:
                 vars += 1
@@ -334,10 +334,10 @@ class connections():
             if t not in self._2relationships:
                 #if we do have enough, keep. Else reject!
                 if len(query) != num_edges:
-                    return [], answers, uniques
+                    return [], answers, [], uniques
         #check if query contains one of the required links, else return malformed...
         if not has_required:
-            return [], answers, uniques
+            return [], answers, [], uniques
         #Replace with variables!
         true_query = []
         for link in query:
@@ -348,34 +348,34 @@ class connections():
         
         #check if it has degenerate join -r->n-r^-1->
         if connections.detect_inverse_degenerate(true_query):
-            return [], answers, uniques
+            return [], answers, [], uniques
 
         # find structure
         q_struct = structure(true_query)
 
         if not (q_struct in structures):
-            return [], answers, uniques
+            return [], answers, [], uniques
 
         # find if unique query
         q_hash = hashQuery(true_query)
 
         # unique representation...
         if q_hash in uniques:
-            return [], answers, uniques # rejected because query has been sampled already!
+            return [], answers, [], uniques # rejected because query has been sampled already!
         else:
             # first generate all answers!
-            answers = self.get_answers_from_query(true_query, other=other)
+            answers, rest = self.get_answers_from_query(true_query, other=other)
             if not answers:
                 # a highly unlikely case where train, val, test might have common answers for a question (so the filter works for all the produced answers for other)
-                return [], answers, uniques
+                return [], answers, [], uniques
             uniques.add(q_hash)
 
-        return true_query, answers, uniques
+        return true_query, answers, rest, uniques
 
     def generate_1hops(self):
-        #* This method yields all 1 hop queries and their answers!
-        for key, value in self._2tails.items():
-            yield ([[key[0], key[1], '_1']], list(value))
+        #* This method yields all 1 hop queries
+        for key in self._2tails:
+            yield [[key[0], key[1], '_1']]
 
     def write_qas(self, qa_name, other: connections|None = None,
             query_orders: list = [[(2, 6000)]],
@@ -413,12 +413,14 @@ class connections():
                             #If specified, we should use the others
                             #1 hops....(which contain the needed links!)
                             #Used to generate val, test data...
-                            for qa in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
-                                f.write(str(qa)+'\n')
+                            for q in tqdm(other.generate_1hops(), desc=f'Generating 1hops inside {name}'):
+                                ans, rest = self.get_answers_from_query(q, other=other)
+                                f.write(str((q, ans, rest))+'\n')
                         else:
                             #Used to generate train data...
-                            for qa in tqdm(self.generate_1hops(), desc=f'Generating 1hops inside {name}'):
-                                f.write(str(qa)+'\n')
+                            for q in tqdm(self.generate_1hops(), desc=f'Generating 1hops inside {name}'):
+                                ans, rest = self.get_answers_from_query(q)
+                                f.write(str((q, ans, rest))+'\n')
                     #now we should use the sampling method for the rest...
                     for  orders_, structure in zip(query_orders_, structures_):
                         num_edges, num_queries = orders_
@@ -427,11 +429,11 @@ class connections():
                         pbar = tqdm(total = num_queries, desc = f"Generating queries with #edges = {num_edges} inside {name}")
                         while len(uniques) < num_queries and tries < tot_tries:
                             #generate query and answers while updating uniques
-                            q, ans, uniques = self.sample_qa(num_edges=num_edges, 
+                            q, ans, rest ,uniques = self.sample_qa(num_edges=num_edges, 
                                                 other=other, uniques=uniques, structures=structure)
-                            #write (q, a) if q non empty
+                            #write (q, a, rest) if q non empty
                             if q:
-                                f.write(str((q, ans))+'\n')
+                                f.write(str((q, ans, rest))+'\n')
                                 pbar.update(1)
                             else:
                                 tries += 1
@@ -489,9 +491,9 @@ class connections():
         if other:
             # impressively we need to filter out the possibility that an answer is produced
             # both by other and without!!!
-            return list({i for i, in_other in variables["_1"] if in_other} - not_other)
+            return list({i for i, in_other in variables["_1"] if in_other} - not_other), list(not_other)
         else:
-            return list(not_other)
+            return list(not_other), []
     
     def get_tails_from_vars(self, hs, r, other: connections|None = None):
         tails = set()
