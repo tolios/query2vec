@@ -1,6 +1,6 @@
 # query2vec
 
-A small repo for producing query embeddings. Under development fo my thesis...
+A small repo for producing query embeddings. Thesis work
 
 ## HowTo
 
